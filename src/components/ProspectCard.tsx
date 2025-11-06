@@ -1,145 +1,48 @@
-import { Prospect } from '@/lib/types'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { HealthGradeBadge } from './HealthGradeBadge'
-import { Buildings, TrendUp, MapPin } from '@phosphor-icons/react'
-import { cn } from '@/lib/utils'
-import { motion } from 'framer-motion'
+import React from 'react';
 
-interface ProspectCardProps {
-  prospect: Prospect
-  onSelect: (prospect: Prospect) => void
-}
-
-const industryIcons: Record<string, string> = {
-  restaurant: '🍽️',
-  retail: '🛍️',
-  construction: '🏗️',
-  healthcare: '🏥',
-  manufacturing: '🏭',
-  services: '💼',
-  technology: '💻'
-}
-
-export function ProspectCard({ prospect, onSelect }: ProspectCardProps) {
-  const isClaimed = prospect.status === 'claimed'
-  const hasGrowthSignals = prospect.growthSignals.length > 0
-  const yearsSinceDefault = Math.floor(prospect.timeSinceDefault / 365)
-
+function ProspectCard({ data }) {
   return (
-    <motion.div
-      whileHover={{ scale: 1.02, y: -4 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-    >
-      <Card 
-        className={cn(
-          'glass-effect p-4 sm:p-5 md:p-6 hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden relative',
-          isClaimed && 'border-primary/50'
-        )}
-        onClick={() => onSelect(prospect)}
-      >
-        <motion.div 
-          className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-        />
-        
-        <div className="relative z-10">
-          <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
-            <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-              <motion.div 
-                className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 text-xl sm:text-2xl flex-shrink-0"
-                animate={{
-                  rotate: [0, 5, 0, -5, 0],
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              >
-                {industryIcons[prospect.industry]}
-              </motion.div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-base sm:text-lg leading-tight mb-1 truncate">
-                  {prospect.companyName}
-                </h3>
-                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-                  <MapPin size={12} weight="fill" className="sm:w-3.5 sm:h-3.5 flex-shrink-0" />
-                  <span className="truncate">{prospect.state}</span>
-                  <span>•</span>
-                  <span className="capitalize truncate">{prospect.industry}</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-              <motion.div 
-                className="font-mono text-xl sm:text-2xl font-semibold text-primary"
-                animate={{
-                  scale: [1, 1.05, 1],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              >
-                {prospect.priorityScore}
-              </motion.div>
-              <div className="text-xs text-muted-foreground">Priority</div>
-            </div>
-          </div>
+    <div className="prospect-card">
+      <div className="pc-title">
+        <h3>{data.companyName}</h3>
+        <span className="pc-score">100</span>
+      </div>
 
-          <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs sm:text-sm text-muted-foreground">Health Score</span>
-              <HealthGradeBadge grade={prospect.healthScore.grade} />
-            </div>
+      <div className="pc-section">
+        <strong>Owner:</strong> {data.owner || 'N/A'}
+      </div>
 
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs sm:text-sm text-muted-foreground">Default Age</span>
-              <Badge variant="outline" className="font-mono text-xs">
-                {yearsSinceDefault}y ago
-              </Badge>
-            </div>
+      <div className="pc-section">
+        <strong>Phone:</strong> {data.phone || 'N/A'}
+      </div>
 
-            {hasGrowthSignals && (
-              <motion.div 
-                className="flex items-center justify-between gap-2"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <span className="text-xs sm:text-sm text-muted-foreground">Growth Signals</span>
-                <Badge className="bg-accent text-accent-foreground text-xs">
-                  <TrendUp size={12} weight="bold" className="mr-1 sm:w-3.5 sm:h-3.5" />
-                  {prospect.growthSignals.length} detected
-                </Badge>
-              </motion.div>
-            )}
-          </div>
+      <div className="pc-section">
+        <strong>Email:</strong> {data.email || 'N/A'}
+      </div>
 
-          <p className="text-xs sm:text-sm text-foreground/80 mb-3 sm:mb-4 line-clamp-2">
-            {prospect.narrative}
-          </p>
+      <div className="pc-section">
+        <strong>Address:</strong>  
+        {data.address1}, {data.city}, {data.state} {data.zip}
+      </div>
 
-          <div className="flex items-center gap-2">
-            <Button 
-              size="sm" 
-              className="flex-1 text-xs sm:text-sm h-8 sm:h-9"
-              disabled={isClaimed}
-            >
-              <Buildings size={14} weight="fill" className="mr-1 sm:mr-2 sm:w-4 sm:h-4" />
-              {isClaimed ? 'Claimed' : 'View Details'}
-            </Button>
-            {isClaimed && prospect.claimedBy && (
-              <Badge variant="secondary" className="text-xs">
-                {prospect.claimedBy}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </Card>
-    </motion.div>
-  )
+      <div className="pc-section">
+        <strong>Filing Date:</strong> {data.filingDate}
+      </div>
+
+      <div className="pc-section">
+        <strong>Lien Type:</strong> {data.lienType}
+      </div>
+
+      <div className="pc-section">
+        <strong>File Type:</strong> {data.fileType}
+      </div>
+
+      <button className="btn-details">
+        View Details
+      </button>
+    </div>
+  );
 }
+
+export default ProspectCard;
+
