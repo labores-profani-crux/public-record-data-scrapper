@@ -42,7 +42,7 @@ describe('StateCollectorFactory', () => {
     })
 
     it('should return undefined for unimplemented state', () => {
-      const collector = factory.getCollector('CA')
+      const collector = factory.getCollector('TX')
 
       expect(collector).toBeUndefined()
     })
@@ -93,9 +93,9 @@ describe('StateCollectorFactory', () => {
     it('should skip unimplemented states', () => {
       const collectors = factory.getCollectors(['NY', 'CA', 'TX'])
 
-      expect(collectors.size).toBe(1)
+      expect(collectors.size).toBe(2)
       expect(collectors.has('NY')).toBe(true)
-      expect(collectors.has('CA')).toBe(false)
+      expect(collectors.has('CA')).toBe(true)
       expect(collectors.has('TX')).toBe(false)
     })
 
@@ -122,8 +122,9 @@ describe('StateCollectorFactory', () => {
     it('should return all implemented collectors', () => {
       const collectors = factory.getAllCollectors()
 
-      expect(collectors.size).toBe(1) // Only NY implemented so far
+      expect(collectors.size).toBe(2) // NY and CA implemented
       expect(collectors.has('NY')).toBe(true)
+      expect(collectors.has('CA')).toBe(true)
     })
 
     it('should return map of collectors', () => {
@@ -136,17 +137,21 @@ describe('StateCollectorFactory', () => {
   describe('hasCollector()', () => {
     it('should return true for implemented state', () => {
       expect(factory.hasCollector('NY')).toBe(true)
+      expect(factory.hasCollector('CA')).toBe(true)
     })
 
     it('should return false for unimplemented state', () => {
-      expect(factory.hasCollector('CA')).toBe(false)
       expect(factory.hasCollector('TX')).toBe(false)
+      expect(factory.hasCollector('FL')).toBe(false)
     })
 
     it('should handle case-insensitive codes', () => {
       expect(factory.hasCollector('ny')).toBe(true)
       expect(factory.hasCollector('Ny')).toBe(true)
       expect(factory.hasCollector('NY')).toBe(true)
+      expect(factory.hasCollector('ca')).toBe(true)
+      expect(factory.hasCollector('Ca')).toBe(true)
+      expect(factory.hasCollector('CA')).toBe(true)
     })
   })
 
@@ -240,15 +245,16 @@ describe('StateCollectorFactory', () => {
     it('should track implemented states', () => {
       const stats = factory.getStats()
 
-      expect(stats.implemented).toBe(1) // Only NY so far
+      expect(stats.implemented).toBe(2) // NY and CA
       expect(stats.implementedStates).toContain('NY')
+      expect(stats.implementedStates).toContain('CA')
     })
 
     it('should track pending states', () => {
       const stats = factory.getStats()
 
-      expect(stats.pending).toBe(50) // 51 - 1
-      expect(stats.pendingStates.length).toBe(50)
+      expect(stats.pending).toBe(49) // 51 - 2
+      expect(stats.pendingStates.length).toBe(49)
     })
 
     it('should track cached states', () => {
@@ -292,7 +298,8 @@ describe('StateCollectorFactory', () => {
 
     it('should provide hasCollectorForState helper', () => {
       expect(hasCollectorForState('NY')).toBe(true)
-      expect(hasCollectorForState('CA')).toBe(false)
+      expect(hasCollectorForState('CA')).toBe(true)
+      expect(hasCollectorForState('TX')).toBe(false)
     })
   })
 
@@ -323,10 +330,11 @@ describe('StateCollectorFactory', () => {
   })
 
   describe('future expansion', () => {
-    it('should be ready for California collector', () => {
-      const pending = factory.getPendingStates()
+    it('should have California collector implemented', () => {
+      const implemented = factory.getImplementedStates()
 
-      expect(pending).toContain('CA')
+      expect(implemented).toContain('CA')
+      expect(factory.hasCollector('CA')).toBe(true)
     })
 
     it('should be ready for Texas collector', () => {

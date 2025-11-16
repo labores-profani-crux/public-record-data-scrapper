@@ -7,6 +7,7 @@
 
 import type { StateCollector } from './types'
 import { NYStateCollector } from './state-collectors/NYStateCollector'
+import { CAStateCollector } from './state-collectors/CAStateCollector'
 
 /**
  * State collector registry
@@ -99,7 +100,7 @@ export class StateCollectorFactory {
   getImplementedStates(): string[] {
     return [
       'NY', // New York - Implemented
-      // 'CA', // California - Pending
+      'CA', // California - Implemented
       // 'TX', // Texas - Pending
       // 'FL', // Florida - Pending
       // 'IL', // Illinois - Pending
@@ -150,9 +151,8 @@ export class StateCollectorFactory {
       case 'NY':
         return new NYStateCollector()
 
-      // California - To be implemented
-      // case 'CA':
-      //   return new CAStateCollector()
+      case 'CA':
+        return new CAStateCollector()
 
       // Texas - To be implemented
       // case 'TX':
