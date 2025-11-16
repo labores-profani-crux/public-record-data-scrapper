@@ -7,6 +7,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+**NEW: Terminal CLI Tool** - Standalone command-line scraper for individual use without GUI. Perfect for field data collection. See [CLI_USAGE.md](./CLI_USAGE.md) for details.
+
 ## 🎯 Overview
 
 The UCC-MCA Intelligence Platform is a sophisticated lead generation tool that analyzes Uniform Commercial Code (UCC) filings to identify businesses with active financing and predict their likelihood of needing Merchant Cash Advances. The platform combines AI-powered analysis, automated data enrichment, and intelligent scoring to help MCA providers find and prioritize the best prospects.
@@ -21,6 +23,80 @@ The UCC-MCA Intelligence Platform is a sophisticated lead generation tool that a
 ✅ **Real-Time Monitoring** - Live prospect tracking and analytics with agent orchestration
 ✅ **Export Capabilities** - CSV, JSON, Excel formats
 ✅ **Security First** - Zero vulnerabilities, type-safe codebase
+
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [CLI Tool](#cli-tool)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Quick Start
+
+### Terminal CLI (No GUI)
+
+For quick data scraping from the command line:
+
+```bash
+# Install dependencies
+npm install --legacy-peer-deps
+
+# List available states
+npm run scrape -- list-states
+
+# Scrape UCC filings
+npm run scrape -- scrape-ucc -c "Company Name" -s CA -o results.json
+
+# Enrich company data
+npm run scrape -- enrich -c "Company Name" -s CA -o enriched.json
+```
+
+See [CLI_USAGE.md](./CLI_USAGE.md) for complete CLI documentation.
+
+### Web Application
+
+```bash
+# Install and run the web app
+npm install --legacy-peer-deps
+npm run dev
+```
+
+## CLI Tool
+
+The platform includes a **standalone terminal-based scraper** for individual use:
+
+### CLI Features
+- 🔍 **UCC Filing Scraper**: Extract filings from CA, TX, FL state portals
+- 📊 **Data Enrichment**: Fetch data from SEC, OSHA, USPTO, Census, SAM.gov
+- 📝 **Multiple Formats**: Export as JSON or CSV
+- 🔄 **Batch Processing**: Process multiple companies from CSV files
+- 🛡️ **Anti-Detection**: Browser fingerprinting protection
+- ⏱️ **Rate Limiting**: Automatic throttling to respect site policies
+
+### Basic Usage
+
+```bash
+# Scrape UCC filings
+npm run scrape -- scrape-ucc -c "Acme Corporation" -s CA
+
+# Enrich company data from public sources
+npm run scrape -- enrich -c "Acme Corporation" -s CA
+
+# Normalize company names
+npm run scrape -- normalize -n "acme corporation, llc"
+
+# Batch process from CSV
+npm run scrape -- batch -i companies.csv -o ./results
+```
+
+See [CLI_USAGE.md](./CLI_USAGE.md) for detailed documentation.
+
+## Features
 
 ### Core Capabilities
 - **Prospect Dashboard**: Displays prioritized list of UCC default prospects with scores, growth signals, and health grades
@@ -42,7 +118,8 @@ The platform includes a comprehensive data enrichment pipeline with:
   - Free: SEC EDGAR, OSHA, USPTO, Census, SAM.gov
   - Starter: D&B, Google Places, Clearbit
   - Professional: Experian, ZoomInfo, NewsAPI (structure ready)
-- **UCC Scraping**: State-specific scrapers for CA, TX, FL (templates)
+- **UCC Scraping**: State-specific scrapers for CA, TX, FL with real Puppeteer implementation
+- **CLI Tool**: Standalone terminal scraper for individual use (see [CLI_USAGE.md](./CLI_USAGE.md))
 - **Usage Tracking**: Quota management and cost tracking
 - **Rate Limiting**: Token bucket algorithm for API protection
 

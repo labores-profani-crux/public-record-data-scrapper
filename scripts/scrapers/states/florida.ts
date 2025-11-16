@@ -2,12 +2,15 @@
  * Florida UCC Scraper
  * 
  * Scrapes UCC filing data from Florida Secretary of State
- * Note: This is a template - actual implementation would require Playwright/Puppeteer
+ * Uses Puppeteer for real web scraping with anti-detection measures
  */
 
 import { BaseScraper, ScraperResult, UCCFiling } from '../base-scraper'
+import puppeteer, { Browser, Page } from 'puppeteer'
 
 export class FloridaScraper extends BaseScraper {
+  private browser: Browser | null = null
+
   constructor() {
     super({
       state: 'FL',
@@ -16,6 +19,30 @@ export class FloridaScraper extends BaseScraper {
       timeout: 30000,
       retryAttempts: 2
     })
+  }
+
+  private async getBrowser(): Promise<Browser> {
+    if (!this.browser) {
+      this.browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920x1080'
+        ]
+      })
+    }
+    return this.browser
+  }
+
+  async closeBrowser(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close()
+      this.browser = null
+    }
   }
 
   /**
@@ -30,17 +57,92 @@ export class FloridaScraper extends BaseScraper {
       }
     }
 
+    let page: Page | null = null
+
     try {
-      // TODO: Implement actual Playwright scraping
-      // Rate limiting
       await this.sleep(12000)
 
-      const filings: UCCFiling[] = []
+      const browser = await this.getBrowser()
+      page = await browser.newPage()
+
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
+      await page.setViewport({ width: 1920, height: 1080 })
+
+      const searchUrl = this.getManualSearchUrl(companyName)
+      await page.goto(searchUrl, { 
+        waitUntil: 'networkidle0', 
+        timeout: this.config.timeout 
+      })
+
+      try {
+        await page.waitForSelector('.search-results, .no-results, .captcha', { 
+          timeout: 10000 
+        })
+      } catch {
+        // Continue
+      }
+
+      const hasCaptcha = await page.evaluate(() => {
+        return document.body.innerText.toLowerCase().includes('captcha') ||
+               document.body.innerText.toLowerCase().includes('robot') ||
+               document.querySelector('iframe[src*="recaptcha"]') !== null
+      })
+
+      if (hasCaptcha) {
+        return {
+          success: false,
+          error: 'CAPTCHA detected - manual intervention required',
+          searchUrl,
+          timestamp: new Date().toISOString()
+        }
+      }
+
+      const filings = await page.evaluate(() => {
+        const results: Array<{
+          filingNumber: string
+          debtorName: string
+          securedParty: string
+          filingDate: string
+          collateral: string
+          status: 'active' | 'terminated' | 'lapsed'
+          filingType: 'UCC-1' | 'UCC-3'
+        }> = []
+        const resultElements = document.querySelectorAll('.ucc-filing, tr.filing-row, .result-item')
+        
+        resultElements.forEach((element) => {
+          try {
+            const filingNumber = element.querySelector('.filing-number, .filing-id')?.textContent?.trim() || ''
+            const debtorName = element.querySelector('.debtor-name, .debtor')?.textContent?.trim() || ''
+            const securedParty = element.querySelector('.secured-party, .creditor')?.textContent?.trim() || ''
+            const filingDate = element.querySelector('.filing-date, .date')?.textContent?.trim() || ''
+            const status = element.querySelector('.status')?.textContent?.trim() || 'unknown'
+            const collateral = element.querySelector('.collateral')?.textContent?.trim() || ''
+
+            if (filingNumber || debtorName) {
+              results.push({
+                filingNumber,
+                debtorName,
+                securedParty,
+                filingDate,
+                collateral,
+                status: status.toLowerCase().includes('active') ? 'active' : 
+                       status.toLowerCase().includes('terminated') ? 'terminated' : 
+                       status.toLowerCase().includes('lapsed') ? 'lapsed' : 'active',
+                filingType: filingNumber.includes('UCC-3') ? 'UCC-3' : 'UCC-1'
+              })
+            }
+          } catch (err) {
+            console.error('Error parsing filing element:', err)
+          }
+        })
+        
+        return results
+      })
 
       return {
         success: true,
-        filings,
-        searchUrl: this.getManualSearchUrl(companyName),
+        filings: filings as UCCFiling[],
+        searchUrl,
         timestamp: new Date().toISOString()
       }
     } catch (error) {
@@ -49,6 +151,13 @@ export class FloridaScraper extends BaseScraper {
         error: error instanceof Error ? error.message : 'Unknown error',
         searchUrl: this.getManualSearchUrl(companyName),
         timestamp: new Date().toISOString()
+      }
+    } finally {
+      // Cleanup page in all cases
+      if (page) {
+        await page.close().catch(() => {
+          // Ignore errors during cleanup
+        })
       }
     }
   }

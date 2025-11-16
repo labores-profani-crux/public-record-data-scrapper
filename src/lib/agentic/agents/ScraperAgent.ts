@@ -6,10 +6,10 @@
 
 import { BaseAgent } from '../BaseAgent'
 import { AgentAnalysis, SystemContext, AgentTask, AgentTaskResult } from '../types'
-import { CaliforniaScraper } from '../../../scripts/scrapers/states/california'
-import { TexasScraper } from '../../../scripts/scrapers/states/texas'
-import { FloridaScraper } from '../../../scripts/scrapers/states/florida'
-import { BaseScraper } from '../../../scripts/scrapers/base-scraper'
+import { CaliforniaScraper } from '../../../../scripts/scrapers/states/california'
+import { TexasScraper } from '../../../../scripts/scrapers/states/texas'
+import { FloridaScraper } from '../../../../scripts/scrapers/states/florida'
+import { BaseScraper } from '../../../../scripts/scrapers/base-scraper'
 
 export class ScraperAgent extends BaseAgent {
   private scrapers: Map<string, BaseScraper> = new Map()
