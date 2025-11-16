@@ -96,8 +96,7 @@ Please maintain the existing project structure:
 - Update the README.md if you're adding new features
 - Add JSDoc comments for complex functions
 - Update type definitions when modifying data structures
-- Keep documentation files in the `docs/` directory current (PRD.md, AGENTIC_FORCES.md, etc.)
-- See [docs/README.md](./docs/README.md) for the complete documentation structure
+- Keep the PRD.md and other documentation files current
 
 ## Reporting Issues
 

@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
+import { 
   Select,
   SelectContent,
   SelectItem,
@@ -20,35 +20,32 @@ import { AdvancedFilters, AdvancedFilterState, initialFilters } from '@/componen
 import { StaleDataWarning } from '@/components/StaleDataWarning'
 import { BatchOperations } from '@/components/BatchOperations'
 import { SortControls, SortField, SortDirection } from '@/components/SortControls'
-import {
-  generateProspects,
-  generateCompetitorData,
+import { 
+  generateProspects, 
+  generateCompetitorData, 
   generatePortfolioCompanies,
   generateDashboardStats
 } from '@/lib/mockData'
 import { Prospect, CompetitorData, PortfolioCompany, IndustryType } from '@/lib/types'
 import { exportProspects, ExportFormat } from '@/lib/exportUtils'
-import {
-  Target,
-  ChartBar,
-  Heart,
+import { 
+  Target, 
+  ChartBar, 
+  Heart, 
   ArrowClockwise,
   MagnifyingGlass,
-  Robot,
-  Database
+  Robot
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { AgenticDashboard } from '@/components/AgenticDashboard'
 import { useAgenticEngine } from '@/hooks/use-agentic-engine'
 import { SystemContext, PerformanceMetrics, UserAction } from '@/lib/agentic/types'
-import { useDataPipeline } from '@/hooks/use-data-pipeline'
-import { featureFlags } from '@/lib/config/dataPipeline'
 
 function App() {
   const [prospects, setProspects, deleteProspects] = useKV<Prospect[]>('ucc-prospects', [])
   const [competitors, setCompetitors] = useKV<CompetitorData[]>('competitor-data', [])
   const [portfolio, setPortfolio] = useKV<PortfolioCompany[]>('portfolio-companies', [])
-
+  
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -62,17 +59,6 @@ function App() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [exportFormat, setExportFormat] = useKV<ExportFormat>('export-format', 'json')
   const [userActions, setUserActions] = useKV<UserAction[]>('user-actions', [])
-
-  // Data Pipeline Integration
-  const dataPipeline = useDataPipeline()
-
-  // Sync pipeline data to KV store when it updates
-  useEffect(() => {
-    if (dataPipeline.prospects.length > 0 && !featureFlags.useMockData) {
-      setProspects(dataPipeline.prospects)
-      setLastDataRefresh(dataPipeline.lastUpdate || new Date().toISOString())
-    }
-  }, [dataPipeline.prospects, dataPipeline.lastUpdate, setProspects, setLastDataRefresh])
 
   // Agentic Engine Integration
   const systemContext: SystemContext = useMemo(() => ({
@@ -124,42 +110,23 @@ function App() {
     })
   }
 
-  const handleRefreshData = async () => {
+  const handleRefreshData = () => {
+    const now = new Date().toISOString()
+    setProspects((current) => {
+      if (!current || current.length === 0) return []
+      return current.map(p => ({
+        ...p,
+        healthScore: {
+          ...p.healthScore,
+          lastUpdated: now.split('T')[0]
+        }
+      }))
+    })
+    setLastDataRefresh(now)
     trackAction('refresh-data')
-
-    if (!featureFlags.useMockData && dataPipeline.refresh) {
-      // Use data pipeline refresh
-      toast.loading('Refreshing data from pipeline...', { id: 'refresh' })
-      try {
-        await dataPipeline.refresh()
-        toast.success('Data refreshed', {
-          id: 'refresh',
-          description: 'All data has been updated from the pipeline.'
-        })
-      } catch (error) {
-        toast.error('Refresh failed', {
-          id: 'refresh',
-          description: error instanceof Error ? error.message : 'Failed to refresh data'
-        })
-      }
-    } else {
-      // Use mock data refresh (update timestamps)
-      const now = new Date().toISOString()
-      setProspects((current) => {
-        if (!current || current.length === 0) return []
-        return current.map(p => ({
-          ...p,
-          healthScore: {
-            ...p.healthScore,
-            lastUpdated: now.split('T')[0]
-          }
-        }))
-      })
-      setLastDataRefresh(now)
-      toast.success('Data refreshed', {
-        description: 'All health scores and signals have been updated.'
-      })
-    }
+    toast.success('Data refreshed', {
+      description: 'All health scores and signals have been updated.'
+    })
   }
 
   const handleProspectSelect = (prospect: Prospect) => {

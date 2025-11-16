@@ -1,18 +1,32 @@
 # UCC-MCA Intelligence Platform
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+[![React](https://img.shields.io/badge/React-19.0-blue.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-6.4-purple.svg)](https://vitejs.dev/)
+
 A comprehensive merchant cash advance intelligence platform that transforms UCC filing data into actionable business opportunities through automated scraping, real-time health monitoring, growth signal detection, and ML-powered lead qualification.
+
+## Table of Contents
+
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
 ### Core Capabilities
 - **Prospect Dashboard**: Displays prioritized list of UCC default prospects with scores, growth signals, and health grades
-- **Data Ingestion & Enrichment Pipeline**: Automated data fetching, enrichment, and refresh from multiple sources
 - **Health Scoring**: Real-time business health monitoring with sentiment analysis and violation tracking
 - **Growth Signal Detection**: Automated detection of hiring, permits, contracts, expansion, and equipment signals
 - **Competitor Intelligence**: Market analysis of UCC filing activity by secured parties
 - **Portfolio Monitoring**: Track funded companies with health alerts and risk indicators
 - **Lead Re-qualification Engine**: Resurrect "dead" leads by detecting new growth/risk signals
-- **Agentic Forces**: Autonomous system improvement with AI agents for continuous optimization
+- **AI Agent Orchestration**: Multi-agent system for intelligent automation, continuous improvement recommendations, and adaptive decision-making
 
 ### Data Export
 
@@ -71,26 +85,6 @@ The platform supports flexible data export in multiple formats:
 npm install
 ```
 
-### Configuration
-
-1. Copy the environment template:
-```bash
-cp .env.example .env
-```
-
-2. Edit `.env` and configure your data sources:
-```bash
-# Use mock data for development (default)
-VITE_USE_MOCK_DATA=true
-
-# For production with real data, set to false and configure API keys
-VITE_USE_MOCK_DATA=false
-VITE_UCC_API_ENDPOINT=https://api.ucc-filings.com/v1
-VITE_UCC_API_KEY=your_api_key_here
-```
-
-See [DATA_PIPELINE.md](./DATA_PIPELINE.md) for detailed configuration options.
-
 ### Development
 
 ```bash
@@ -98,13 +92,6 @@ npm run dev
 ```
 
 The application will be available at `http://localhost:5000` (or next available port).
-
-### Demo
-
-Run the data pipeline demo:
-```bash
-npx tsx demo-data-pipeline.ts
-```
 
 ### Build
 
@@ -121,35 +108,47 @@ npm run preview
 ## Project Structure
 
 ```
-/src                 # Source code
-  /components        # React components
-    /ui             # Reusable UI components (Radix-based)
-  /lib              # Utilities and types
-    /agentic        # Autonomous improvement system
-    types.ts        # TypeScript type definitions
-    mockData.ts     # Mock data generators
-    utils.ts        # Utility functions
-    exportUtils.ts  # Export functionality (JSON/CSV)
-  /hooks            # Custom React hooks
-  /styles           # CSS and theme files
-  App.tsx           # Main application component
-
-/docs               # Documentation
-  PRD.md           # Product Requirements Document
-  COMPETITIVE_ANALYSIS.md
-  LOGIC_ANALYSIS.md
-  IMPLEMENTATION_SUMMARY.md
-  TESTING.md
-  AGENTIC_FORCES.md
-  /archive          # Historical documentation
-
-/examples           # Example code and demos
-  demo-agentic.ts  # Agentic system demonstration
+./src
+  /components           # React components
+    /ui                # Reusable UI components (Radix-based)
+    ProspectCard.tsx          # Individual prospect display card
+    ProspectDetailDialog.tsx  # Detailed prospect information modal
+    AdvancedFilters.tsx       # Advanced filtering controls
+    BatchOperations.tsx       # Bulk operations on prospects
+    CompetitorChart.tsx       # Competitor intelligence visualization
+    PortfolioMonitor.tsx      # Portfolio tracking and monitoring
+    StatsOverview.tsx         # Dashboard statistics overview
+    AgenticDashboard.tsx      # AI agent orchestration dashboard
+    HealthGradeBadge.tsx      # Health grade indicator component
+    SignalTimeline.tsx        # Growth signal timeline visualization
+    SortControls.tsx          # Data sorting controls
+    StaleDataWarning.tsx      # Data freshness warning component
+  /lib                  # Utilities and types
+    /agentic           # AI agent orchestration system
+      AgenticEngine.ts        # Core agent orchestration engine
+      AgenticCouncil.ts       # Multi-agent coordination
+      BaseAgent.ts            # Base agent class
+      types.ts                # Agentic system type definitions
+      /agents                 # Individual agent implementations
+    types.ts                  # TypeScript type definitions
+    mockData.ts               # Mock data generators
+    utils.ts                  # Utility functions
+    exportUtils.ts            # Export functionality (JSON/CSV)
+  /hooks                # Custom React hooks
+    use-agentic-engine.ts     # Hook for AI agent engine
+    use-mobile.ts             # Mobile detection hook
+  /styles               # Global styles
+    theme.css                 # Theme definitions and variables
+  App.tsx               # Main application component
+  ErrorFallback.tsx     # Error boundary fallback component
+  main.tsx              # Application entry point
+  index.css             # Global CSS imports
+  main.css              # Main stylesheet
 ```
 
 ## Competitive Analysis
 
-See [COMPETITIVE_ANALYSIS.md](./docs/COMPETITIVE_ANALYSIS.md) for detailed research on similar applications and implemented improvements based on industry best practices.
+See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for detailed research on similar applications and implemented improvements based on industry best practices.
 
 ## Recent Improvements
 
@@ -162,49 +161,20 @@ Based on competitive analysis of similar B2B SaaS platforms (D&B, ZoomInfo, UCC 
    - Timestamped filenames with filter context
    - Comprehensive field coverage in exports
 
-See [COMPETITIVE_ANALYSIS.md](./docs/COMPETITIVE_ANALYSIS.md) for the full analysis and roadmap of planned improvements.
-
-## Data Pipeline
-
-The platform includes a comprehensive automated data ingestion and enrichment pipeline:
-
-### Features
-- **Multi-Source Ingestion**: Fetch UCC filings from state portals, APIs, and databases
-- **Intelligent Enrichment**: Automatically detect growth signals, calculate health scores, and estimate revenue
-- **Scheduled Refresh**: Periodic updates with configurable intervals
-- **Error Handling**: Circuit breakers, retry logic, and comprehensive error handling
-- **Real-time Monitoring**: Event-based status updates and metrics
-
-### Quick Start
-
-**Development Mode** (Mock Data):
-```bash
-# Uses generated mock data
-npm run dev
-```
-
-**Production Mode** (Real Data):
-```bash
-# Configure .env with real API keys
-VITE_USE_MOCK_DATA=false
-VITE_ENABLE_REALTIME_INGESTION=true
-
-# Start the app
-npm run dev
-```
-
-See [DATA_PIPELINE.md](./DATA_PIPELINE.md) for comprehensive documentation.
+See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for the full analysis and roadmap of planned improvements.
 
 ## Documentation
 
-- **Data Pipeline**: See [DATA_PIPELINE.md](./DATA_PIPELINE.md) for ingestion and enrichment details
-- **Agentic Forces**: See [AGENTIC_FORCES.md](./AGENTIC_FORCES.md) for autonomous improvement system
 - **Product Requirements**: See [PRD.md](./PRD.md) for detailed feature specifications
 - **Logic Analysis**: See [LOGIC_ANALYSIS.md](./LOGIC_ANALYSIS.md) for implementation details
-- **Testing**: See [TESTING.md](./TESTING.md) for testing guidelines
 - **Security**: See [SECURITY.md](./SECURITY.md) for security policies
-- **Competitive Analysis**: See [COMPETITIVE_ANALYSIS.md](./docs/COMPETITIVE_ANALYSIS.md) for market research and improvement roadmap
-- **Contributing**: See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines
+- **Competitive Analysis**: See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for market research and improvement roadmap
+- **Agentic Forces**: See [AGENTIC_FORCES.md](./AGENTIC_FORCES.md) for AI agent orchestration system documentation
+- **Implementation Summary**: See [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md) for implementation details
+
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guidelines](./CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 

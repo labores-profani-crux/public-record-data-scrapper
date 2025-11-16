@@ -11,7 +11,6 @@ import { DataAnalyzerAgent } from './agents/DataAnalyzerAgent'
 import { OptimizerAgent } from './agents/OptimizerAgent'
 import { SecurityAgent } from './agents/SecurityAgent'
 import { UXEnhancerAgent } from './agents/UXEnhancerAgent'
-import { CompetitorAgent } from './agents/CompetitorAgent'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface CouncilReview {
@@ -33,8 +32,7 @@ export class AgenticCouncil {
       new DataAnalyzerAgent(),
       new OptimizerAgent(),
       new SecurityAgent(),
-      new UXEnhancerAgent(),
-      new CompetitorAgent()
+      new UXEnhancerAgent()
     ]
   }
 
