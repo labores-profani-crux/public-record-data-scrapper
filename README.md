@@ -22,6 +22,34 @@ The UCC-MCA Intelligence Platform is a sophisticated lead generation tool that a
 ✅ **Export Capabilities** - CSV, JSON, Excel formats
 ✅ **Security First** - Zero vulnerabilities, type-safe codebase
 
+### Core Capabilities
+- **Prospect Dashboard**: Displays prioritized list of UCC default prospects with scores, growth signals, and health grades
+- **Data Enrichment Pipeline**: Multi-tier data acquisition from free and commercial sources (see [ENRICHMENT_PIPELINE.md](./ENRICHMENT_PIPELINE.md))
+- **Health Scoring**: Real-time business health monitoring with sentiment analysis and violation tracking
+- **Growth Signal Detection**: Automated detection of hiring, permits, contracts, expansion, and equipment signals
+- **Competitor Intelligence**: Market analysis of UCC filing activity by secured parties
+- **Portfolio Monitoring**: Track funded companies with health alerts and risk indicators
+- **Lead Re-qualification Engine**: Resurrect "dead" leads by detecting new growth/risk signals
+- **AI Agent Orchestration**: Multi-agent system for intelligent automation, continuous improvement recommendations, and adaptive decision-making
+
+### Data Enrichment
+
+The platform includes a comprehensive data enrichment pipeline with:
+
+- **5 Specialized Agents**: DataAcquisition, Scraper, DataNormalization, Monitoring, EnrichmentOrchestrator
+- **Tiered Access**: Free, Starter, Professional, and Enterprise subscription tiers
+- **Multiple Data Sources**:
+  - Free: SEC EDGAR, OSHA, USPTO, Census, SAM.gov
+  - Starter: D&B, Google Places, Clearbit
+  - Professional: Experian, ZoomInfo, NewsAPI (structure ready)
+- **UCC Scraping**: State-specific scrapers for CA, TX, FL (templates)
+- **Usage Tracking**: Quota management and cost tracking
+- **Rate Limiting**: Token bucket algorithm for API protection
+
+See [ENRICHMENT_PIPELINE.md](./ENRICHMENT_PIPELINE.md) for detailed documentation.
+
+### Data Export
+
 ## 🚀 Quick Start
 
 ### Prerequisites
