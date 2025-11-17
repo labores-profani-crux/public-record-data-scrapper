@@ -14,6 +14,12 @@ import competitorsRouter from './routes/competitors'
 import portfolioRouter from './routes/portfolio'
 import enrichmentRouter from './routes/enrichment'
 import healthRouter from './routes/health'
+import jobsRouter from './routes/jobs'
+
+// Import queue infrastructure
+import { initializeQueues, closeQueues } from './queue/queues'
+import { jobScheduler } from './queue/scheduler'
+import { redisConnection } from './queue/connection'
 
 export class Server {
   private app: Express
@@ -54,6 +60,7 @@ export class Server {
     this.app.use('/api/portfolio', portfolioRouter)
     this.app.use('/api/enrichment', enrichmentRouter)
     this.app.use('/api/health', healthRouter)
+    this.app.use('/api/jobs', jobsRouter)
 
     // Root endpoint
     this.app.get('/', (req, res) => {
@@ -67,7 +74,8 @@ export class Server {
           competitors: '/api/competitors',
           portfolio: '/api/portfolio',
           enrichment: '/api/enrichment',
-          health: '/api/health'
+          health: '/api/health',
+          jobs: '/api/jobs'
         }
       })
     })
@@ -93,6 +101,22 @@ export class Server {
       process.exit(1)
     }
 
+    // Initialize job queues
+    try {
+      initializeQueues()
+    } catch (error) {
+      console.error('Failed to initialize job queues:', error)
+      process.exit(1)
+    }
+
+    // Start job scheduler
+    try {
+      await jobScheduler.start()
+    } catch (error) {
+      console.error('Failed to start job scheduler:', error)
+      process.exit(1)
+    }
+
     // Start server
     this.app.listen(port, host, () => {
       console.log('')
@@ -101,7 +125,9 @@ export class Server {
       console.log(`  Environment: ${config.server.env}`)
       console.log(`  Server:      http://${host}:${port}`)
       console.log(`  Health:      http://${host}:${port}/api/health`)
+      console.log(`  Jobs:        http://${host}:${port}/api/jobs`)
       console.log(`  Database:    ${this.maskConnectionString(config.database.url)}`)
+      console.log(`  Redis:       ${config.redis.host}:${config.redis.port}`)
       console.log('─────────────────────────────────────')
       console.log('')
     })
@@ -110,7 +136,19 @@ export class Server {
   async shutdown(): Promise<void> {
     console.log('')
     console.log('Shutting down server...')
+
+    // Stop job scheduler
+    jobScheduler.stop()
+
+    // Close queues
+    await closeQueues()
+
+    // Disconnect from Redis
+    await redisConnection.disconnect()
+
+    // Disconnect from database
     await database.disconnect()
+
     console.log('✓ Server shutdown complete')
     process.exit(0)
   }

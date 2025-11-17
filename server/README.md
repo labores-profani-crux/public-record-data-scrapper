@@ -15,14 +15,31 @@ server/
 │   ├── requestLogger.ts     # Request logging with correlation IDs
 │   ├── rateLimiter.ts       # Rate limiting
 │   └── validateRequest.ts   # Zod schema validation
+├── queue/              # Job queue system (BullMQ + Redis)
+│   ├── connection.ts        # Redis connection manager
+│   ├── queues.ts           # Queue definitions
+│   ├── scheduler.ts        # Recurring job scheduler
+│   ├── workers/            # Worker implementations
+│   │   ├── ingestionWorker.ts   # UCC data ingestion
+│   │   ├── enrichmentWorker.ts  # Data enrichment
+│   │   └── healthWorker.ts      # Health score calculations
+│   └── README.md           # Queue system documentation
 ├── routes/             # API route handlers
 │   ├── prospects.ts    # Prospect endpoints
+│   ├── competitors.ts  # Competitor intelligence endpoints
+│   ├── portfolio.ts    # Portfolio company endpoints
+│   ├── enrichment.ts   # Data enrichment endpoints
+│   ├── jobs.ts         # Job queue monitoring endpoints
 │   └── health.ts       # Health check endpoints
 ├── services/           # Business logic layer
-│   └── ProspectsService.ts  # Prospect operations
+│   ├── ProspectsService.ts      # Prospect operations
+│   ├── CompetitorsService.ts    # Competitor analysis
+│   ├── PortfolioService.ts      # Portfolio management
+│   └── EnrichmentService.ts     # Data enrichment
 ├── types/              # TypeScript type definitions
 ├── utils/              # Utility functions
-├── index.ts            # Server entry point
+├── index.ts            # API server entry point
+├── worker.ts           # Worker process entry point
 ├── tsconfig.json       # TypeScript configuration
 └── README.md           # This file
 ```
@@ -42,6 +59,34 @@ server/
 - `PATCH /api/prospects/:id` - Update prospect
 - `DELETE /api/prospects/:id` - Delete prospect
 
+### Competitors
+- `GET /api/competitors` - List competitors (paginated, filtered, sorted)
+- `GET /api/competitors/:id` - Get competitor details
+- `GET /api/competitors/:id/analysis` - Get SWOT analysis
+- `GET /api/competitors/stats` - Get competitor statistics
+
+### Portfolio
+- `GET /api/portfolio` - List portfolio companies (paginated, filtered, sorted)
+- `GET /api/portfolio/:id` - Get portfolio company details
+- `GET /api/portfolio/:id/health-history` - Get health score history
+- `GET /api/portfolio/stats` - Get portfolio statistics
+
+### Enrichment
+- `POST /api/enrichment/prospect` - Enrich single prospect
+- `POST /api/enrichment/batch` - Batch enrich prospects
+- `POST /api/enrichment/refresh` - Trigger data refresh
+- `GET /api/enrichment/status` - Get enrichment pipeline status
+- `GET /api/enrichment/queue` - Get enrichment queue status
+
+### Job Queue
+- `POST /api/jobs/ingestion` - Trigger UCC ingestion job
+- `POST /api/jobs/enrichment` - Trigger enrichment job
+- `POST /api/jobs/health-scores` - Trigger health score calculation
+- `GET /api/jobs/:jobId` - Get job status
+- `GET /api/jobs/queues/stats` - Get queue statistics
+- `GET /api/jobs/queues/:queueName` - List jobs in queue
+- `DELETE /api/jobs/:jobId` - Remove job from queue
+
 ## Environment Variables
 
 See `.env.example` in the project root for all available environment variables.
@@ -57,7 +102,7 @@ Required variables:
 
 - Node.js 20+
 - PostgreSQL 15+
-- Redis (optional, for Phase 3)
+- Redis 6+ (required for job queue system)
 
 ### Installation
 
@@ -85,11 +130,19 @@ npm run migrate:status
 # Run backend server only
 npm run dev:server
 
-# Run both frontend and backend
+# Run worker process only (requires Redis)
+npm run dev:worker
+
+# Run frontend + backend
+npm run dev:all
+
+# Run frontend + backend + workers (full stack)
 npm run dev:all
 ```
 
 The server will start on http://localhost:3000
+
+**Note:** The `dev:all` script now includes the worker process. Make sure Redis is running before starting the full stack.
 
 ### Production Build
 
@@ -97,9 +150,14 @@ The server will start on http://localhost:3000
 # Build backend
 npm run build:server
 
-# Start production server
+# Start production server (API only)
 npm run start:server
+
+# Start production worker process (separate terminal/process)
+npm run start:worker
 ```
+
+For production deployments, run the server and worker as separate processes. This allows independent scaling and resource allocation.
 
 ## Architecture
 
@@ -206,6 +264,43 @@ Example log:
   statusCode: 200,
   duration: '150ms'
 }
+```
+
+## Job Queue System
+
+The backend includes a BullMQ-based job queue system for background processing and scheduled tasks.
+
+### Queues
+
+1. **UCC Ingestion Queue** - Processes state-by-state UCC filing data ingestion
+   - Schedule: Daily at 2:00 AM
+   - Concurrency: 2 jobs
+
+2. **Data Enrichment Queue** - Enriches prospect data with external signals
+   - Schedule: Every 6 hours
+   - Concurrency: 5 jobs
+
+3. **Health Score Queue** - Calculates health scores for portfolio companies
+   - Schedule: Every 12 hours
+   - Concurrency: 3 jobs
+
+### Usage
+
+See `server/queue/README.md` for detailed documentation on:
+- Job monitoring API endpoints
+- Manual job triggering
+- Worker configuration
+- Retry strategies
+- Troubleshooting
+
+### Redis Requirement
+
+The job queue system requires Redis to be running. Configure via environment variables:
+
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your-password
 ```
 
 ## Performance
