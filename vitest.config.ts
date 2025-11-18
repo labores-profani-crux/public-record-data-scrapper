@@ -8,6 +8,17 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    // Performance optimizations
+    pool: 'forks', // Use forks for better isolation and performance
+    poolOptions: {
+      forks: {
+        singleFork: false, // Allow multiple worker processes
+        maxForks: 4 // Limit concurrent workers
+      }
+    },
+    fileParallelism: true, // Run test files in parallel
+    testTimeout: 10000, // 10 second default timeout
+    hookTimeout: 10000, // 10 second hook timeout
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

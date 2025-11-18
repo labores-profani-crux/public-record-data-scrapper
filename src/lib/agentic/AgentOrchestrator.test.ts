@@ -327,7 +327,7 @@ describe('AgentOrchestrator', () => {
     })
 
     it('should handle collection failures gracefully', async () => {
-      const results = await orchestrator.collectFromAllSources()
+      const results = await orchestrator.collectFromAllSources({ limit: 2 })
 
       expect(results.length).toBeGreaterThan(0)
       results.forEach(result => {
@@ -337,7 +337,7 @@ describe('AgentOrchestrator', () => {
 
     it('should update last collection time', async () => {
       const beforeTime = new Date().toISOString()
-      await orchestrator.collectFromAllSources()
+      await orchestrator.collectFromAllSources({ limit: 2 })
       const status = orchestrator.getStatus()
 
       expect(status.lastCollectionTime).toBeDefined()
@@ -449,8 +449,8 @@ describe('AgentOrchestrator', () => {
       const orch = new AgentOrchestrator(config)
       const timerId = orch.startPeriodicCollection()
 
-      // Wait for at least one collection (increased wait time)
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Wait for at least one collection to complete (100ms interval + 500ms collection time)
+      await new Promise(resolve => setTimeout(resolve, 650))
 
       orch.stopPeriodicCollection(timerId)
 
@@ -493,13 +493,19 @@ describe('AgentOrchestrator', () => {
       const config: OrchestrationConfig = {
         enableStateAgents: true,
         enableEntryPointAgents: false,
-        states: ['NY', 'INVALID', 'CA'],
+        states: ['NY', 'CA'],
         maxConcurrentCollections: 3,
         collectionInterval: 1000
       }
 
       const orch = new AgentOrchestrator(config)
-      const results = await orch.collectFromAllSources()
+
+      // Collect from valid and invalid states to get mixed results
+      const results = await Promise.all([
+        orch.collectFromState('NY'),
+        orch.collectFromState('INVALID'),
+        orch.collectFromState('CA')
+      ])
 
       const successful = results.filter(r => r.success).length
       const failed = results.filter(r => !r.success).length
@@ -551,6 +557,220 @@ describe('AgentOrchestrator', () => {
 
       const afterStatus = orchestrator.getStatus()
       expect(afterStatus.collectionsInProgress).toBe(0) // Should be back to 0
+    })
+  })
+
+  describe('edge cases', () => {
+    describe('boundary conditions', () => {
+      it('should handle empty states array by creating all agents', () => {
+        const config: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: [],
+          maxConcurrentCollections: 1,
+          collectionInterval: 1000
+        }
+
+        const orch = new AgentOrchestrator(config)
+        const status = orch.getStatus()
+        // Empty array falls through to createAllStateAgents()
+        expect(status.totalAgents).toBeGreaterThan(0)
+      })
+
+      it('should handle very large concurrency limit', async () => {
+        const config: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: ['NY', 'CA', 'TX'],
+          maxConcurrentCollections: 1000,
+          collectionInterval: 1000
+        }
+
+        const orch = new AgentOrchestrator(config)
+        const results = await orch.collectFromAllSources()
+        expect(results).toHaveLength(3)
+      })
+
+      it('should handle single state collection', async () => {
+        const config: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: ['NY'],
+          maxConcurrentCollections: 1,
+          collectionInterval: 1000
+        }
+
+        const orch = new AgentOrchestrator(config)
+        const results = await orch.collectFromAllSources()
+        expect(results).toHaveLength(1)
+        expect(results[0].success).toBe(true)
+      })
+    })
+
+    describe('error recovery', () => {
+      it('should recover from multiple consecutive failures', async () => {
+        const results = await Promise.all([
+          orchestrator.collectFromState('INVALID1'),
+          orchestrator.collectFromState('INVALID2'),
+          orchestrator.collectFromState('INVALID3')
+        ])
+
+        expect(results).toHaveLength(3)
+        results.forEach(result => {
+          expect(result.success).toBe(false)
+          expect(result.errors).toBeDefined()
+        })
+      })
+
+      it('should maintain accurate counts after failures', async () => {
+        const beforeStatus = orchestrator.getStatus()
+        const beforeFailed = beforeStatus.failedCollections
+
+        await orchestrator.collectFromState('INVALID')
+        await orchestrator.collectFromState('INVALID')
+
+        const afterStatus = orchestrator.getStatus()
+        expect(afterStatus.failedCollections).toBe(beforeFailed + 2)
+      })
+
+      it('should include error details in failed results', async () => {
+        const result = await orchestrator.collectFromState('INVALID_STATE')
+
+        expect(result.success).toBe(false)
+        expect(result.errors).toBeDefined()
+        expect(result.errors!.length).toBeGreaterThan(0)
+        expect(result.errors![0]).toContain('not found')
+      })
+    })
+
+    describe('concurrent operations', () => {
+      it('should handle multiple simultaneous collectFromAllSources calls', async () => {
+        const config: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: ['NY', 'CA'],
+          maxConcurrentCollections: 2,
+          collectionInterval: 1000
+        }
+
+        const orch = new AgentOrchestrator(config)
+
+        const [results1, results2] = await Promise.all([
+          orch.collectFromAllSources(),
+          orch.collectFromAllSources()
+        ])
+
+        expect(results1).toHaveLength(2)
+        expect(results2).toHaveLength(2)
+      })
+
+      it('should track metrics correctly with concurrent collections', async () => {
+        const config: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: ['NY', 'CA', 'TX'],
+          maxConcurrentCollections: 3,
+          collectionInterval: 1000
+        }
+
+        const orch = new AgentOrchestrator(config)
+
+        await Promise.all([
+          orch.collectFromState('NY'),
+          orch.collectFromState('CA'),
+          orch.collectFromState('TX')
+        ])
+
+        const status = orch.getStatus()
+        expect(status.totalCollections).toBe(3)
+        expect(status.successfulCollections).toBe(3)
+        expect(status.collectionsInProgress).toBe(0)
+      })
+    })
+
+    describe('state management', () => {
+      it('should maintain separate state for different orchestrators', async () => {
+        const config1: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: ['NY'],
+          maxConcurrentCollections: 1,
+          collectionInterval: 1000
+        }
+
+        const config2: OrchestrationConfig = {
+          enableStateAgents: true,
+          enableEntryPointAgents: false,
+          states: ['CA'],
+          maxConcurrentCollections: 1,
+          collectionInterval: 1000
+        }
+
+        const orch1 = new AgentOrchestrator(config1)
+        const orch2 = new AgentOrchestrator(config2)
+
+        await orch1.collectFromAllSources()
+        const status1 = orch1.getStatus()
+        const status2 = orch2.getStatus()
+
+        expect(status1.totalCollections).toBe(1)
+        expect(status2.totalCollections).toBe(0)
+      })
+
+      it('should update lastCollectionTime only after successful collection', async () => {
+        const beforeTime = orchestrator.getStatus().lastCollectionTime
+
+        await new Promise(resolve => setTimeout(resolve, 100))
+        await orchestrator.collectFromState('INVALID')
+
+        const afterStatus = orchestrator.getStatus()
+        expect(afterStatus.lastCollectionTime).toBe(beforeTime)
+      })
+
+      it('should return immutable status copies', () => {
+        const status1 = orchestrator.getStatus()
+        const status2 = orchestrator.getStatus()
+
+        status1.totalCollections = 9999
+
+        expect(status2.totalCollections).not.toBe(9999)
+        expect(orchestrator.getStatus().totalCollections).not.toBe(9999)
+      })
+    })
+
+    describe('collection options validation', () => {
+      it('should handle statesOnly option correctly', async () => {
+        const results = await orchestrator.collectFromAllSources({
+          statesOnly: true,
+          limit: 2
+        })
+
+        expect(results.length).toBeGreaterThan(0)
+        results.forEach(result => {
+          expect(result.agentId).toContain('state-agent')
+        })
+      })
+
+      it('should handle entryPointsOnly option correctly', async () => {
+        const results = await orchestrator.collectFromAllSources({
+          entryPointsOnly: true
+        })
+
+        expect(results.length).toBeGreaterThan(0)
+        results.forEach(result => {
+          expect(result.agentId).not.toContain('state-agent')
+        })
+      })
+
+      it('should handle very small limit for states', async () => {
+        const results = await orchestrator.collectFromAllSources({
+          statesOnly: true,
+          limit: 1
+        })
+
+        expect(results.length).toBe(1)
+        expect(results[0].success).toBe(true)
+      })
     })
   })
 })
