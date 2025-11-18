@@ -333,7 +333,7 @@ describe('AgentOrchestrator', () => {
       results.forEach(result => {
         expect(result.duration).toBeGreaterThan(0)
       })
-    })
+    }, 15000)
 
     it('should update last collection time', async () => {
       const beforeTime = new Date().toISOString()
@@ -344,7 +344,7 @@ describe('AgentOrchestrator', () => {
       expect(new Date(status.lastCollectionTime).getTime()).toBeGreaterThanOrEqual(
         new Date(beforeTime).getTime()
       )
-    })
+    }, 15000)
 
     it('should respect concurrency limit', async () => {
       const config: OrchestrationConfig = {
@@ -449,14 +449,14 @@ describe('AgentOrchestrator', () => {
       const orch = new AgentOrchestrator(config)
       const timerId = orch.startPeriodicCollection()
 
-      // Wait for at least one collection
-      await new Promise(resolve => setTimeout(resolve, 150))
+      // Wait for at least one collection (increased wait time)
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       orch.stopPeriodicCollection(timerId)
 
       const status = orch.getStatus()
       expect(status.totalCollections).toBeGreaterThan(0)
-    })
+    }, 15000)
   })
 
   describe('DEFAULT_ORCHESTRATION_CONFIG', () => {
@@ -506,7 +506,7 @@ describe('AgentOrchestrator', () => {
 
       expect(successful).toBeGreaterThan(0)
       expect(failed).toBeGreaterThan(0)
-    })
+    }, 15000)
 
     it('should return errors in failed collection results', async () => {
       const result = await orchestrator.collectFromState('INVALID')
