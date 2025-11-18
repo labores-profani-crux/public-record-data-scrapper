@@ -16,6 +16,7 @@
         "test:coverage": "vitest --coverage",
         "postinstall": "node ./scripts/ensure-main-branch.mjs",
         "scrape": "tsx scripts/cli-scraper.ts",
+        "scrape:ca": "tsx scripts/scrape-and-store.ts",
         "db:init": "tsx scripts/init-database.ts",
         "db:seed": "tsx scripts/seed-database.ts",
         "db:setup": "npm run db:init && npm run db:seed"
