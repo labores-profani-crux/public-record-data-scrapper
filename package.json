@@ -15,7 +15,10 @@
         "test:ui": "vitest --ui",
         "test:coverage": "vitest --coverage",
         "postinstall": "node ./scripts/ensure-main-branch.mjs",
-        "scrape": "tsx scripts/cli-scraper.ts"
+        "scrape": "tsx scripts/cli-scraper.ts",
+        "db:init": "tsx scripts/init-database.ts",
+        "db:seed": "tsx scripts/seed-database.ts",
+        "db:setup": "npm run db:init && npm run db:seed"
     },
     "dependencies": {
         "@github/spark": "^0.39.0",
