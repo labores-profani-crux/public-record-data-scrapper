@@ -14,6 +14,11 @@
         "test:watch": "vitest --watch",
         "test:ui": "vitest --ui",
         "test:coverage": "vitest --coverage",
+        "test:scrapers": "tsx scripts/scrapers/test-scrapers.ts",
+        "test:scrapers:tx": "tsx scripts/scrapers/test-scrapers.ts TX",
+        "test:scrapers:fl": "tsx scripts/scrapers/test-scrapers.ts FL",
+        "test:scrapers:ca": "tsx scripts/scrapers/test-scrapers.ts CA",
+        "test:scrapers:headed": "tsx scripts/scrapers/test-scrapers.ts --headed",
         "postinstall": "node ./scripts/ensure-main-branch.mjs",
         "scrape": "tsx scripts/cli-scraper.ts"
     },
