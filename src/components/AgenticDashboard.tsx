@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,7 +41,7 @@ export function AgenticDashboard({ agentic }: AgenticDashboardProps) {
     low: 'bg-blue-500'
   }
 
-  const categoryIcons: Record<ImprovementCategory, React.ReactNode> = {
+  const categoryIcons: Record<ImprovementCategory, ReactNode> = {
     'performance': <TrendUp className="w-4 h-4" />,
     'security': <Shield className="w-4 h-4" />,
     'usability': <Sparkle className="w-4 h-4" />,
@@ -210,7 +211,7 @@ interface ImprovementCardProps {
   improvement: Improvement
   onApprove: (id: string) => void
   priorityColors: Record<ImprovementPriority, string>
-  categoryIcons: Record<ImprovementCategory, React.ReactNode>
+  categoryIcons: Record<ImprovementCategory, ReactNode>
   showActions?: boolean
 }
 
