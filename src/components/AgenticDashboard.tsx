@@ -10,16 +10,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Robot, 
-  Brain, 
-  CheckCircle, 
-  Clock, 
+import {
+  Robot,
+  Brain,
+  CheckCircle,
+  Clock,
   Warning,
   TrendUp,
   Shield,
   Sparkle,
-  Users
+  Users,
+  Target,
+  LightbulbFilament
 } from '@phosphor-icons/react'
 import { Improvement, ImprovementPriority, ImprovementCategory } from '@/lib/agentic/types'
 import { UseAgenticEngineResult } from '@/hooks/use-agentic-engine'
@@ -45,7 +47,11 @@ export function AgenticDashboard({ agentic }: AgenticDashboardProps) {
     'security': <Shield className="w-4 h-4" />,
     'usability': <Sparkle className="w-4 h-4" />,
     'data-quality': <Brain className="w-4 h-4" />,
-    'feature-enhancement': <CheckCircle className="w-4 h-4" />
+    'feature-enhancement': <CheckCircle className="w-4 h-4" />,
+    'competitor-analysis': <Users className="w-4 h-4" />,
+    'threat-analysis': <Warning className="w-4 h-4" />,
+    'opportunity-analysis': <LightbulbFilament className="w-4 h-4" />,
+    'strategic-recommendation': <Target className="w-4 h-4" />
   }
 
   const pendingImprovements = improvements.filter(i => i.status === 'detected' || i.status === 'approved')
