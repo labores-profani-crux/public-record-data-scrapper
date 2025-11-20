@@ -7,6 +7,7 @@
 
 import { BaseScraper, ScraperResult } from '../base-scraper'
 import puppeteer, { Browser, Page } from 'puppeteer'
+import { PaginationHandler } from '../pagination-handler'
 
 export class FloridaScraper extends BaseScraper {
   private browser: Browser | null = null
@@ -14,9 +15,9 @@ export class FloridaScraper extends BaseScraper {
   constructor() {
     super({
       state: 'FL',
-      baseUrl: 'https://www.floridaucc.com/uccweb/search.aspx',
-      rateLimit: 5, // 5 requests per minute
-      timeout: 30000,
+      baseUrl: 'https://floridaucc.com/search',
+      rateLimit: 4, // 4 requests per minute (conservative for privatized system)
+      timeout: 45000, // Increased timeout for third-party portal
       retryAttempts: 2
     })
   }
@@ -97,6 +98,9 @@ export class FloridaScraper extends BaseScraper {
 
   /**
    * Perform the actual search operation
+   *
+   * NOTE: Florida UCC is managed by Image API, LLC through floridaucc.com
+   * The search is picky about exact name matches and formatting.
    */
   private async performSearch(companyName: string, searchUrl: string): Promise<ScraperResult> {
     let page: Page | null = null
@@ -107,100 +111,26 @@ export class FloridaScraper extends BaseScraper {
 
       this.log('info', 'Browser page created', { companyName })
 
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36')
+      // Set user agent and viewport
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
       await page.setViewport({ width: 1920, height: 1080 })
 
       // Navigate to Florida UCC search page
-      this.log('info', 'Navigating to Florida UCC search page', { companyName })
+      this.log('info', 'Navigating to FL UCC search page', { companyName, searchUrl })
       await page.goto(this.config.baseUrl, {
         waitUntil: 'networkidle2',
         timeout: this.config.timeout
       })
 
-      // Wait for page to load and find search form
-      try {
-        await page.waitForSelector('input[type="text"], input[name*="debtor"], input[name*="name"], form', {
-          timeout: 10000
-        })
-      } catch (err) {
-        this.log('warn', 'Search form not immediately found, trying alternative approach', { companyName })
-      }
+      // Wait for page to fully load
+      await this.sleep(2000)
 
-      // Try to fill in the debtor name field (multiple possible selectors)
-      const debtorFieldSelectors = [
-        'input[name*="debtor"]',
-        'input[name*="DebtorName"]',
-        'input[id*="debtor"]',
-        'input[id*="Debtor"]',
-        'input[placeholder*="debtor"]',
-        'input[placeholder*="Debtor"]',
-        'input[type="text"]'
-      ]
-
-      let fieldFilled = false
-      for (const selector of debtorFieldSelectors) {
-        try {
-          const field = await page.$(selector)
-          if (field) {
-            await field.type(companyName, { delay: 100 })
-            this.log('info', 'Filled debtor name field', { selector })
-            fieldFilled = true
-            break
-          }
-        } catch (err) {
-          // Try next selector
-        }
-      }
-
-      if (!fieldFilled) {
-        this.log('warn', 'Could not find debtor name field, page structure may have changed')
-      }
-
-      // Submit the search form
-      const submitSelectors = [
-        'button[type="submit"]',
-        'input[type="submit"]',
-        'button:has-text("Search")',
-        'input[value*="Search"]',
-        'input[id*="Search"]'
-      ]
-
-      let formSubmitted = false
-      for (const selector of submitSelectors) {
-        try {
-          const button = await page.$(selector)
-          if (button) {
-            await Promise.all([
-              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: this.config.timeout }),
-              button.click()
-            ])
-            this.log('info', 'Submitted search form', { selector })
-            formSubmitted = true
-            break
-          }
-        } catch (err) {
-          // Try next selector
-        }
-      }
-
-      if (!formSubmitted && fieldFilled) {
-        // Try pressing Enter as fallback
-        try {
-          await page.keyboard.press('Enter')
-          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 5000 })
-          this.log('info', 'Submitted search via Enter key')
-        } catch (err) {
-          this.log('warn', 'Could not submit search form')
-        }
-      }
-
-      // Wait for results to load
-      await page.waitForTimeout(2000)
-
+      // Check for CAPTCHA early
       const hasCaptcha = await page.evaluate(() => {
         return document.body.innerText.toLowerCase().includes('captcha') ||
                document.body.innerText.toLowerCase().includes('robot') ||
-               document.querySelector('iframe[src*="recaptcha"]') !== null
+               document.querySelector('iframe[src*="recaptcha"]') !== null ||
+               document.querySelector('iframe[src*="hcaptcha"]') !== null
       })
 
       if (hasCaptcha) {
@@ -208,13 +138,117 @@ export class FloridaScraper extends BaseScraper {
         return {
           success: false,
           error: 'CAPTCHA detected - manual intervention required',
-          searchUrl,
+          searchUrl: page.url(),
           timestamp: new Date().toISOString()
         }
       }
 
-      // Scrape UCC filing data with multiple selector patterns
-      const { filings: rawFilings, errors: parseErrors } = await page.evaluate(() => {
+      // Look for debtor name search field (Florida UCC uses specific field names)
+      const searchFormFilled = await page.evaluate((name) => {
+        // Try various selectors for Florida UCC debtor search
+        const possibleSelectors = [
+          'input[name="debtorName"]',
+          'input[name="debtor_name"]',
+          'input[name="DebtorName"]',
+          'input[id="debtorName"]',
+          'input[id="debtor_name"]',
+          'input[placeholder*="Debtor"]',
+          'input[placeholder*="debtor"]',
+          'input[type="text"]'
+        ]
+
+        for (const selector of possibleSelectors) {
+          const input = document.querySelector(selector) as HTMLInputElement
+          if (input && !input.disabled) {
+            input.value = name
+            // Trigger events to ensure React/Vue/Angular apps detect the change
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          }
+        }
+        return false
+      }, companyName)
+
+      if (!searchFormFilled) {
+        this.log('warn', 'Could not find debtor name search field', { companyName })
+        return {
+          success: false,
+          error: 'Unable to locate debtor name search field on Florida UCC portal. Portal structure may have changed.',
+          searchUrl: page.url(),
+          timestamp: new Date().toISOString()
+        }
+      }
+
+      // Submit the search form
+      const formSubmitted = await page.evaluate(() => {
+        // Try to find and click search/submit button
+        const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"]'))
+        const searchButton = buttons.find(btn => {
+          const text = (btn as HTMLElement).textContent?.toLowerCase() || (btn as HTMLInputElement).value?.toLowerCase() || ''
+          return text.includes('search') || text.includes('submit') || text.includes('find')
+        })
+
+        if (searchButton) {
+          (searchButton as HTMLElement).click()
+          return true
+        }
+
+        // Fallback: try form submission
+        const form = document.querySelector('form')
+        if (form) {
+          form.submit()
+          return true
+        }
+
+        return false
+      })
+
+      if (!formSubmitted) {
+        this.log('warn', 'Could not submit search form', { companyName })
+        return {
+          success: false,
+          error: 'Unable to submit search form on Florida UCC portal.',
+          searchUrl: page.url(),
+          timestamp: new Date().toISOString()
+        }
+      }
+
+      // Wait for results to load
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {})
+      await this.sleep(3000) // Additional wait for dynamic content
+
+      // Check for "no results" message
+      const noResults = await page.evaluate(() => {
+        const bodyText = document.body.innerText.toLowerCase()
+        return bodyText.includes('no records found') ||
+               bodyText.includes('no results') ||
+               bodyText.includes('0 results') ||
+               bodyText.includes('no filings found')
+      })
+
+      if (noResults) {
+        this.log('info', 'No UCC filings found', { companyName })
+        return {
+          success: true,
+          filings: [],
+          searchUrl: page.url(),
+          timestamp: new Date().toISOString()
+        }
+      }
+
+      // Initialize pagination handler
+      const paginationHandler = new PaginationHandler({ maxPages: 10 })
+      const allFilings: Array<any> = []
+      const allErrors: string[] = []
+      let currentPage = 1
+
+      // Pagination loop
+      while (true) {
+        this.log('info', `Scraping page ${currentPage}`, { companyName })
+
+        // Extract UCC filing data with multiple selector strategies
+        const { filings: rawFilings, errors: parseErrors } = await page.evaluate(() => {
         const results: Array<{
           filingNumber: string
           debtorName: string
@@ -226,120 +260,72 @@ export class FloridaScraper extends BaseScraper {
         }> = []
         const errors: string[] = []
 
-        // Try multiple selector patterns for finding results
-        const selectorPatterns = [
-          'table tr:not(:first-child)', // Table rows excluding header
-          '.search-result',
-          '.result-row',
-          '.ucc-filing',
-          'tr.filing-row',
-          '.result-item',
-          '[class*="result"]',
-          '[class*="filing"]',
-          '[id*="GridView"] tr:not(:first-child)' // ASP.NET GridView pattern
-        ]
+        // Try multiple selector strategies for Florida UCC results
+        let resultElements = document.querySelectorAll('table.results tbody tr, table.search-results tbody tr, div.result-row, div.filing-row')
 
-        let resultElements: NodeListOf<Element> | null = null
-        for (const pattern of selectorPatterns) {
-          const elements = document.querySelectorAll(pattern)
-          if (elements.length > 0) {
-            resultElements = elements
-            break
+        // Fallback: find any table with multiple rows
+        if (resultElements.length === 0) {
+          const tables = document.querySelectorAll('table')
+          for (const table of tables) {
+            const rows = table.querySelectorAll('tbody tr, tr')
+            if (rows.length > 1) {
+              resultElements = rows
+              break
+            }
           }
         }
 
-        if (!resultElements || resultElements.length === 0) {
-          errors.push('No result elements found on page - page structure may have changed')
-          return { filings: results, errors }
-        }
-
         resultElements.forEach((element, index) => {
+          // Skip header rows
+          if (element.querySelector('th')) {
+            return
+          }
+
           try {
-            const getText = (selectors: string[]): string => {
-              for (const sel of selectors) {
-                const el = element.querySelector(sel)
-                if (el?.textContent?.trim()) {
-                  return el.textContent.trim()
-                }
+            const cells = element.querySelectorAll('td')
+
+            if (cells.length >= 3) {
+              // Common Florida UCC table pattern: filing#, date, debtor, secured party, status
+              const filingNumber = cells[0]?.textContent?.trim() || ''
+              const filingDate = cells[1]?.textContent?.trim() || cells[2]?.textContent?.trim() || ''
+              const debtorName = cells[2]?.textContent?.trim() || cells[1]?.textContent?.trim() || ''
+              const securedParty = cells[3]?.textContent?.trim() || ''
+              const status = cells[4]?.textContent?.trim() || cells[cells.length - 1]?.textContent?.trim() || ''
+
+              if (filingNumber || debtorName) {
+                results.push({
+                  filingNumber,
+                  debtorName,
+                  securedParty,
+                  filingDate,
+                  collateral: '', // Florida may require detail page navigation
+                  status: status.toLowerCase().includes('active') || status.toLowerCase().includes('filed') ? 'active' :
+                         status.toLowerCase().includes('terminated') || status.toLowerCase().includes('discharged') ? 'terminated' :
+                         status.toLowerCase().includes('lapsed') || status.toLowerCase().includes('expired') ? 'lapsed' : 'active',
+                  filingType: filingNumber.toLowerCase().includes('ucc3') || filingNumber.toLowerCase().includes('ucc-3') || filingNumber.toLowerCase().includes('amendment') ? 'UCC-3' : 'UCC-1'
+                })
               }
-              const cells = element.querySelectorAll('td')
-              if (cells.length > 0) {
-                const cellTexts = Array.from(cells).map(c => c.textContent?.trim() || '')
-                return cellTexts.join('|')
+            } else if (element.classList.length > 0) {
+              // Try div-based layout
+              const filingNumber = element.querySelector('[class*="filing"], [class*="number"]')?.textContent?.trim() || ''
+              const debtorName = element.querySelector('[class*="debtor"], [class*="name"]')?.textContent?.trim() || ''
+              const securedParty = element.querySelector('[class*="secured"], [class*="party"], [class*="creditor"]')?.textContent?.trim() || ''
+              const filingDate = element.querySelector('[class*="date"], [class*="filed"]')?.textContent?.trim() || ''
+              const status = element.querySelector('[class*="status"]')?.textContent?.trim() || ''
+
+              if (filingNumber || debtorName) {
+                results.push({
+                  filingNumber,
+                  debtorName,
+                  securedParty,
+                  filingDate,
+                  collateral: '',
+                  status: status.toLowerCase().includes('active') ? 'active' :
+                         status.toLowerCase().includes('terminated') ? 'terminated' :
+                         status.toLowerCase().includes('lapsed') ? 'lapsed' : 'active',
+                  filingType: filingNumber.toLowerCase().includes('ucc3') || filingNumber.toLowerCase().includes('ucc-3') ? 'UCC-3' : 'UCC-1'
+                })
               }
-              return ''
-            }
-
-            const filingNumber = getText([
-              '[class*="filing"]',
-              '[class*="number"]',
-              '[class*="file"]',
-              'td:nth-child(1)',
-              '.filing-number',
-              '.filing-id'
-            ]).split('|')[0] || ''
-
-            const debtorName = getText([
-              '[class*="debtor"]',
-              '[class*="name"]',
-              'td:nth-child(2)',
-              '.debtor-name',
-              '.debtor'
-            ]).split('|')[1] || getText([
-              '[class*="debtor"]',
-              '[class*="name"]'
-            ]).split('|')[0] || ''
-
-            const securedParty = getText([
-              '[class*="secured"]',
-              '[class*="party"]',
-              '[class*="creditor"]',
-              'td:nth-child(3)',
-              '.secured-party',
-              '.creditor'
-            ]).split('|')[2] || getText([
-              '[class*="secured"]',
-              '[class*="party"]',
-              '[class*="creditor"]'
-            ]).split('|')[0] || ''
-
-            const filingDate = getText([
-              '[class*="date"]',
-              'td:nth-child(4)',
-              '.filing-date',
-              '.date'
-            ]).split('|')[3] || getText([
-              '[class*="date"]'
-            ]).split('|')[0] || ''
-
-            const status = getText([
-              '[class*="status"]',
-              'td:nth-child(5)',
-              '.status'
-            ]).split('|')[4] || getText([
-              '[class*="status"]'
-            ]).split('|')[0] || 'active'
-
-            const collateral = getText([
-              '[class*="collateral"]',
-              'td:nth-child(6)',
-              '.collateral'
-            ]).split('|')[5] || getText([
-              '[class*="collateral"]'
-            ]).split('|')[0] || ''
-
-            if (filingNumber || debtorName) {
-              results.push({
-                filingNumber,
-                debtorName,
-                securedParty,
-                filingDate,
-                collateral,
-                status: status.toLowerCase().includes('active') ? 'active' :
-                       status.toLowerCase().includes('terminated') ? 'terminated' :
-                       status.toLowerCase().includes('lapsed') ? 'lapsed' : 'active',
-                filingType: filingNumber.toUpperCase().includes('UCC-3') || filingNumber.toUpperCase().includes('AMENDMENT') ? 'UCC-3' : 'UCC-1'
-              })
             }
           } catch (err) {
             errors.push(`Error parsing element ${index}: ${err instanceof Error ? err.message : String(err)}`)
@@ -347,10 +333,43 @@ export class FloridaScraper extends BaseScraper {
         })
 
         return { filings: results, errors }
-      })
+        })
 
-      // Validate filings and collect errors
-      const { validatedFilings, validationErrors } = this.validateFilings(rawFilings, parseErrors)
+        // Add filings and errors from this page
+        allFilings.push(...rawFilings)
+        allErrors.push(...parseErrors)
+
+        this.log('info', `Page ${currentPage}: Found ${rawFilings.length} raw filings`, { companyName })
+
+        // Check for pagination
+        const pagination = await paginationHandler.detectPagination(page)
+
+        this.log('info', `Pagination detected: ${pagination.paginationType}`, {
+          companyName,
+          currentPage: pagination.currentPage,
+          totalPages: pagination.totalPages,
+          hasNextPage: pagination.hasNextPage
+        })
+
+        // Check if we should continue to next page
+        if (!paginationHandler.shouldContinue(currentPage, pagination)) {
+          this.log('info', `Pagination complete at page ${currentPage}`, { companyName })
+          break
+        }
+
+        // Navigate to next page
+        const navigated = await paginationHandler.goToNextPage(page, pagination)
+
+        if (!navigated) {
+          this.log('info', 'Could not navigate to next page, stopping pagination', { companyName })
+          break
+        }
+
+        currentPage++
+      }
+
+      // Validate all filings and collect errors
+      const { validatedFilings, validationErrors } = this.validateFilings(allFilings, allErrors)
 
       if (validationErrors.length > 0) {
         this.log('warn', 'Some filings had parsing or validation errors', {
@@ -360,9 +379,10 @@ export class FloridaScraper extends BaseScraper {
         })
       }
 
-      this.log('info', 'Filings scraped and validated', {
+      this.log('info', 'All filings scraped and validated', {
         companyName,
-        rawCount: rawFilings.length,
+        totalPages: currentPage,
+        rawCount: allFilings.length,
         validCount: validatedFilings.length,
         errorCount: validationErrors.length
       })
@@ -370,15 +390,15 @@ export class FloridaScraper extends BaseScraper {
       return {
         success: true,
         filings: validatedFilings,
-        searchUrl,
+        searchUrl: page.url(),
         timestamp: new Date().toISOString(),
         parsingErrors: validationErrors.length > 0 ? validationErrors : undefined
       }
     } finally {
       if (page) {
         await page.close().catch((err) => {
-          this.log('warn', 'Error closing page', { 
-            error: err instanceof Error ? err.message : String(err) 
+          this.log('warn', 'Error closing page', {
+            error: err instanceof Error ? err.message : String(err)
           })
         })
       }
@@ -387,11 +407,12 @@ export class FloridaScraper extends BaseScraper {
 
   /**
    * Get manual search URL for Florida
-   * Florida uses a form-based search, so we return the main search page
+   *
+   * NOTE: Florida UCC is managed by Image API, LLC at floridaucc.com
+   * Direct URL search may not work - users will need to use the search form.
    */
   getManualSearchUrl(companyName: string): string {
-    // Florida UCC search is form-based, return the main search URL
-    // Users will need to manually enter the debtor name
-    return this.config.baseUrl
+    // Florida UCC doesn't support direct URL parameters, return search page
+    return `${this.config.baseUrl}?debtor=${encodeURIComponent(companyName)}`
   }
 }
