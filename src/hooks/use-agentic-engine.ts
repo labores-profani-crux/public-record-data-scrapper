@@ -4,10 +4,10 @@
  * Provides React integration for the agentic system
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useState, useEffect, useCallback } from 'react'
 import { AgenticEngine } from '@/lib/agentic/AgenticEngine'
 import { SystemContext, Improvement, ImprovementStatus, AgenticConfig } from '@/lib/agentic/types'
+import { usePersistentState } from './usePersistentState'
 
 export interface UseAgenticEngineResult {
   engine: AgenticEngine | null
@@ -22,8 +22,8 @@ export interface UseAgenticEngineResult {
 export function useAgenticEngine(context: SystemContext, config?: Partial<AgenticConfig>): UseAgenticEngineResult {
   const [engine] = useState(() => new AgenticEngine(config))
   const [isRunning, setIsRunning] = useState(false)
-  const [improvements, setImprovements] = useKV<Improvement[]>('agentic-improvements', [])
-  const [lastRunTime, setLastRunTime] = useKV<string>('agentic-last-run', '')
+  const [improvements, setImprovements] = usePersistentState<Improvement[]>('agentic-improvements', [])
+  const [lastRunTime, setLastRunTime] = usePersistentState<string>('agentic-last-run', '')
   const [systemHealth, setSystemHealth] = useState(engine.getSystemHealth())
 
   // Run autonomous cycle
@@ -62,15 +62,11 @@ export function useAgenticEngine(context: SystemContext, config?: Partial<Agenti
     return engine.getImprovementsByStatus(status)
   }, [engine])
 
-  // Auto-run on mount if enabled (only once per session)
-  const hasAutoRunRef = useRef(false)
-
   useEffect(() => {
-    if (hasAutoRunRef.current) return
+    const hasProspects = context.prospects.length > 0
+    const shouldAutoRun = !lastRunTime && engine.getConfig().enabled && hasProspects
 
-    const shouldAutoRun = !lastRunTime && engine.getConfig().enabled
-    if (shouldAutoRun && context.prospects.length > 0) {
-      hasAutoRunRef.current = true
+    if (shouldAutoRun) {
       console.log('🤖 Auto-running initial agentic cycle...')
       runCycle()
     }
