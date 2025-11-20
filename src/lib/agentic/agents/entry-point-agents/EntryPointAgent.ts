@@ -52,7 +52,7 @@ export class EntryPointAgent extends BaseAgent implements Agent {
 
   constructor(config: EntryPointConfig) {
     const customId = config.id
-    const agentName = `${config.name} Entry Point Agent`
+    const agentName = config.name
     const capabilities = [
       `Collect from ${config.name} via ${config.type.charAt(0).toUpperCase() + config.type.slice(1)}`,
       `Parse ${config.dataFormat.toUpperCase()} format`,
@@ -92,7 +92,7 @@ export class EntryPointAgent extends BaseAgent implements Agent {
         id: `${this.customId}-low-reliability`,
         category: 'performance',
         severity: 'critical',
-        description: `${this.config.name} success rate is ${successRate.toFixed(1)}%`,
+        description: `${this.config.name} success rate is ${Math.round(successRate)}%`,
         evidence: {
           successRate,
           totalRequests: this.metrics.totalRequests,
@@ -105,7 +105,7 @@ export class EntryPointAgent extends BaseAgent implements Agent {
         category: 'performance',
         priority: 'critical',
         title: `Improve ${this.config.name} reliability`,
-        description: `Entry point showing ${successRate.toFixed(1)}% success rate`,
+        description: `Entry point showing ${Math.round(successRate)}% success rate`,
         reasoning: 'Low reliability leads to data gaps and missed opportunities',
         estimatedImpact: `Restore to 95%+ success rate, recover ${this.metrics.failedRequests} failed requests`,
         automatable: this.config.type === 'api',
@@ -175,7 +175,7 @@ export class EntryPointAgent extends BaseAgent implements Agent {
 
         improvements.push({
           id: `${this.customId}-optimize-cost`,
-          category: 'opportunity-analysis',
+          category: 'performance',
           priority: 'low',
           title: `Optimize ${this.config.name} request costs`,
           description: `Consider caching or batching to reduce ${this.metrics.totalRequests} requests`,
@@ -269,7 +269,7 @@ export class EntryPointAgent extends BaseAgent implements Agent {
     console.log(`[${this.customId}] Collecting data from ${this.config.name}`, params)
     this.metrics.totalRequests++
     this.metrics.lastRequestTime = new Date().toISOString()
-    return {}
+    return []
   }
 
   getMetrics() {

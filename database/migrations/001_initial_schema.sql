@@ -1,12 +1,28 @@
+-- Migration: 001_initial_schema
+-- Description: Initial database schema for UCC-MCA Intelligence Platform
+-- Date: 2025-01-01
+-- Up Migration
+
+BEGIN;
+
 -- ============================================================================
--- UCC-MCA Intelligence Platform - Database Schema
--- PostgreSQL 14+
+-- Extensions
 -- ============================================================================
 
--- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For fuzzy text search
-CREATE EXTENSION IF NOT EXISTS "btree_gin"; -- For composite indexes
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "btree_gin";
+
+-- ============================================================================
+-- Migration Tracking Table (must be created first)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    id SERIAL PRIMARY KEY,
+    version VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- ============================================================================
 -- Tables
@@ -15,22 +31,20 @@ CREATE EXTENSION IF NOT EXISTS "btree_gin"; -- For composite indexes
 -- UCC Filings Table
 CREATE TABLE ucc_filings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    external_id VARCHAR(255) UNIQUE NOT NULL, -- Original filing ID from source
+    external_id VARCHAR(255) UNIQUE NOT NULL,
     filing_date DATE NOT NULL,
     debtor_name VARCHAR(500) NOT NULL,
-    debtor_name_normalized VARCHAR(500) NOT NULL, -- Lowercased, trimmed for search
+    debtor_name_normalized VARCHAR(500) NOT NULL,
     secured_party VARCHAR(500) NOT NULL,
     secured_party_normalized VARCHAR(500) NOT NULL,
     state CHAR(2) NOT NULL,
     lien_amount DECIMAL(15, 2),
     status VARCHAR(20) NOT NULL CHECK (status IN ('active', 'terminated', 'lapsed')),
     filing_type VARCHAR(10) NOT NULL CHECK (filing_type IN ('UCC-1', 'UCC-3')),
-    source VARCHAR(100) NOT NULL, -- 'ny-portal', 'api', etc.
-    raw_data JSONB, -- Store original data for reference
+    source VARCHAR(100) NOT NULL,
+    raw_data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- Indexes
     CONSTRAINT filing_date_check CHECK (filing_date <= CURRENT_DATE)
 );
 
@@ -56,7 +70,7 @@ CREATE TABLE prospects (
     )),
     priority_score INTEGER NOT NULL CHECK (priority_score >= 0 AND priority_score <= 100),
     default_date DATE NOT NULL,
-    time_since_default INTEGER NOT NULL, -- Days since default
+    time_since_default INTEGER NOT NULL,
     last_filing_date DATE,
     narrative TEXT,
     estimated_revenue DECIMAL(15, 2),
@@ -65,8 +79,7 @@ CREATE TABLE prospects (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_enriched_at TIMESTAMP WITH TIME ZONE,
-    enrichment_confidence DECIMAL(3, 2), -- 0.00 to 1.00
-
+    enrichment_confidence DECIMAL(3, 2),
     CONSTRAINT default_date_check CHECK (default_date <= CURRENT_DATE),
     CONSTRAINT time_since_default_check CHECK (time_since_default >= 0)
 );
@@ -84,7 +97,6 @@ CREATE TABLE prospect_ucc_filings (
     prospect_id UUID REFERENCES prospects(id) ON DELETE CASCADE,
     ucc_filing_id UUID REFERENCES ucc_filings(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
     PRIMARY KEY (prospect_id, ucc_filing_id)
 );
 
@@ -103,9 +115,8 @@ CREATE TABLE growth_signals (
     source_url TEXT,
     score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
     confidence DECIMAL(3, 2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    raw_data JSONB, -- Store original signal data
+    raw_data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
     CONSTRAINT detected_date_check CHECK (detected_date <= CURRENT_DATE)
 );
 
@@ -127,9 +138,8 @@ CREATE TABLE health_scores (
     avg_sentiment DECIMAL(3, 2) NOT NULL CHECK (avg_sentiment >= 0 AND avg_sentiment <= 1),
     violation_count INTEGER NOT NULL CHECK (violation_count >= 0),
     recorded_date DATE NOT NULL,
-    raw_data JSONB, -- Store detailed health metrics
+    raw_data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
     CONSTRAINT recorded_date_check CHECK (recorded_date <= CURRENT_DATE)
 );
 
@@ -145,10 +155,10 @@ CREATE TABLE competitors (
     lender_name_normalized VARCHAR(500) NOT NULL,
     filing_count INTEGER NOT NULL DEFAULT 0,
     avg_deal_size DECIMAL(15, 2),
-    market_share DECIMAL(5, 2), -- Percentage
-    industries VARCHAR(50)[], -- Array of industries
+    market_share DECIMAL(5, 2),
+    industries VARCHAR(50)[],
     top_state CHAR(2),
-    monthly_trend DECIMAL(5, 2), -- Percentage change
+    monthly_trend DECIMAL(5, 2),
     last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -182,7 +192,6 @@ CREATE TABLE portfolio_health_scores (
     portfolio_company_id UUID REFERENCES portfolio_companies(id) ON DELETE CASCADE,
     health_score_id UUID REFERENCES health_scores(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
     PRIMARY KEY (portfolio_company_id, health_score_id)
 );
 
@@ -193,11 +202,11 @@ CREATE TABLE ingestion_logs (
     status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'partial', 'failed')),
     records_found INTEGER NOT NULL DEFAULT 0,
     records_processed INTEGER NOT NULL DEFAULT 0,
-    errors JSONB, -- Array of error messages
+    errors JSONB,
     processing_time_ms INTEGER,
     started_at TIMESTAMP WITH TIME ZONE NOT NULL,
     completed_at TIMESTAMP WITH TIME ZONE,
-    metadata JSONB -- Additional context
+    metadata JSONB
 );
 
 CREATE INDEX idx_ingestion_source ON ingestion_logs(source);
@@ -331,7 +340,7 @@ CREATE TRIGGER normalize_ucc_debtor_name
     EXECUTE FUNCTION normalize_company_name();
 
 -- ============================================================================
--- Indexes for Full-Text Search
+-- Full-Text Search
 -- ============================================================================
 
 -- Add full-text search columns
@@ -357,26 +366,10 @@ CREATE TRIGGER prospects_search_vector_trigger
 CREATE INDEX idx_prospects_search_vector ON prospects USING gin(search_vector);
 
 -- ============================================================================
--- Sample Queries
+-- Record Migration
 -- ============================================================================
 
--- Find prospects by company name (fuzzy)
--- SELECT * FROM prospects WHERE company_name_normalized % 'acme corp';
+INSERT INTO schema_migrations (version, name)
+VALUES ('001', 'initial_schema');
 
--- Find lapsed UCC filings in last 3 years
--- SELECT * FROM ucc_filings
--- WHERE status = 'lapsed'
---   AND filing_date >= CURRENT_DATE - INTERVAL '3 years';
-
--- Top prospects with growth signals
--- SELECT p.*, COUNT(gs.id) as signal_count
--- FROM prospects p
--- LEFT JOIN growth_signals gs ON p.id = gs.prospect_id
--- GROUP BY p.id
--- ORDER BY p.priority_score DESC, signal_count DESC
--- LIMIT 20;
-
--- Competitor market analysis
--- SELECT * FROM competitors
--- ORDER BY market_share DESC
--- LIMIT 10;
+COMMIT;

@@ -166,7 +166,7 @@ describe('EntryPointAgent', () => {
     })
 
     it('should suggest cost optimization for expensive endpoints', async () => {
-      agent.updateMetrics({ totalRequests: 5000 })
+      agent.updateMetrics({ totalRequests: 15000 })
 
       const analysis = await agent.analyze(mockContext)
 

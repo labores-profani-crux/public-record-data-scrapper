@@ -1,52 +1,86 @@
-# Documentation
+# UCC-MCA Platform Documentation
 
-This directory contains comprehensive documentation for the UCC-MCA Intelligence Platform.
+**Quick Links:**
+- [Main README](../README.md) - Project overview
+- [Quick Start Guide](./guides/QUICK_START.md) - Get started in 5 minutes
+- [CLI Usage Guide](./guides/CLI_USAGE.md) - Command-line tool documentation
+- [Testing Guide](./TESTING.md) - Running and writing tests
 
-## Core Documentation
+---
 
-### [PRD.md](./PRD.md)
-Product Requirements Document outlining the features, specifications, and goals of the platform.
+## Documentation Structure
 
-### [AGENTIC_FORCES.md](./AGENTIC_FORCES.md)
-Documentation for the autonomous improvement system that enables self-analysis and continuous enhancement.
+### 📚 Guides (`/docs/guides/`)
+User-facing guides and tutorials:
+- **[QUICK_START.md](./guides/QUICK_START.md)** - Get the platform running quickly
+- **[CLI_USAGE.md](./guides/CLI_USAGE.md)** - Complete CLI tool documentation
+- **[CHEATSHEET.md](./guides/CHEATSHEET.md)** - Quick reference for common commands
+- **[FREE_STACK_GUIDE.md](./guides/FREE_STACK_GUIDE.md)** - Using free-tier data sources
+- **[MAINTENANCE_GUIDE.md](./guides/MAINTENANCE_GUIDE.md)** - System maintenance and ops
 
-### [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)
-Research and analysis of similar B2B SaaS platforms with improvement recommendations.
+### 🔧 Technical Documentation (`/docs/technical/`)
+Architecture and implementation details:
+- **[API_SPEC.md](./technical/API_SPEC.md)** - API endpoint specifications
+- **[GENERATIVE_RECURSIVE_ARCHITECTURE.md](./technical/GENERATIVE_RECURSIVE_ARCHITECTURE.md)** - AI/ML system architecture
+- **[ENRICHMENT_PIPELINE.md](./technical/ENRICHMENT_PIPELINE.md)** - Data enrichment flow
+- **[INTEGRATION_GUIDE.md](./technical/INTEGRATION_GUIDE.md)** - Third-party integrations
+- **[RECURSIVE_FEATURES.md](./technical/RECURSIVE_FEATURES.md)** - Advanced recursive features
+- **[SCRAPER_RELIABILITY.md](./technical/SCRAPER_RELIABILITY.md)** - Web scraping best practices
 
-### [LOGIC_ANALYSIS.md](./LOGIC_ANALYSIS.md)
-Detailed analysis of the business logic and implementation patterns used throughout the platform.
+### 🎨 Design Documentation (`/docs/design/`)
+UI/UX and design specifications:
+- **[DASHBOARD_REDESIGN.md](./design/DASHBOARD_REDESIGN.md)** - Dashboard design evolution
+- **[UI_CHANGES.md](./design/UI_CHANGES.md)** - UI component changes
 
-### [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)
-Summary of major features implemented and development milestones.
+### 📊 Reports (`/docs/reports/`)
+Analysis and status reports (4 files)
 
-### [TESTING.md](./TESTING.md)
-Testing strategies, guidelines, and documentation for the platform.
+### 📦 Archive (`/docs/archive/`)
+Historical documentation for reference only:
+- **consolidation/** - Branch and PR consolidation reports (7 files)
+- **pr-summaries/** - Pull request summaries (6 files)
+- **implementation/** - Implementation summaries (5 files)
+- **historical/** - Research and strategy documents (10 files)
 
-## Technical Documentation
+---
 
-### [technical/STATE_IMPLEMENTATION_PLAN.md](./technical/STATE_IMPLEMENTATION_PLAN.md)
-Comprehensive implementation plan for priority state data collection agents (NY, CA, TX, FL, IL) with detailed technical requirements, cost estimates, and 10-week rollout timeline.
+## Getting Started
 
-### [technical/DATA_PIPELINE.md](./technical/DATA_PIPELINE.md)
-Data ingestion and enrichment pipeline architecture and implementation details.
+### New Users
+1. Read [Quick Start Guide](./guides/QUICK_START.md)
+2. Review [CLI Usage](./guides/CLI_USAGE.md) for the command-line tool
+3. Check [Testing Guide](./TESTING.md) to run tests
 
-### [technical/DEPLOYMENT.md](./technical/DEPLOYMENT.md)
-Deployment strategies, environment setup, and production configuration.
+### Developers
+1. Review [Technical Documentation](./technical/)
+2. Read [API Spec](./technical/API_SPEC.md) for endpoints
+3. Study [Architecture](./technical/GENERATIVE_RECURSIVE_ARCHITECTURE.md)
 
-### [technical/INGESTION_IMPLEMENTATION_SUMMARY.md](./technical/INGESTION_IMPLEMENTATION_SUMMARY.md)
-Summary of data ingestion implementation and architecture decisions.
+### Contributors
+1. Read [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines
+2. Check [TODO.md](../TODO.md) for planned work
+3. Review [CHANGELOG.md](../CHANGELOG.md) for recent changes
 
-## Archive
+---
 
-The `archive/` subdirectory contains historical documentation that may be useful for reference but is no longer actively maintained:
+## Documentation Statistics
 
-- **BRANCH_CONSOLIDATION.md**: Documentation of past branch merge activities
-- **BRANCH_RESOLUTION.md**: Historical branch resolution strategies
+- **Total Files**: ~60 markdown files
+- **Root Essential**: 6 files (README, TODO, CHANGELOG, CONTRIBUTING, SECURITY, PARALLEL_WORK_PLAN)
+- **Active Guides**: 5 files
+- **Technical Docs**: 6 files
+- **Design Docs**: 2 files
+- **Reports**: 4 files
+- **Archived**: 28+ files (historical reference only)
 
-## Other Documentation
+---
 
-Additional documentation can be found in the root directory:
+## Need Help?
 
-- [README.md](../README.md): Main project overview and getting started guide
-- [CONTRIBUTING.md](../CONTRIBUTING.md): Guidelines for contributing to the project
-- [SECURITY.md](../SECURITY.md): Security policies and vulnerability reporting
+- **Issues**: Report bugs at [GitHub Issues](https://github.com/ivi374forivi/public-record-data-scrapper/issues)
+- **Questions**: Check existing documentation first, then open a discussion
+- **Contributions**: See [CONTRIBUTING.md](../CONTRIBUTING.md)
+
+---
+
+**Last Updated**: 2025-11-18
