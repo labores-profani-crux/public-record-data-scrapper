@@ -4,6 +4,7 @@
  * Displays autonomous system improvements, agent analyses, and execution status
  */
 
+<<<<<<< HEAD
 import { type ReactNode, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -176,7 +177,7 @@ export function AgenticDashboard({ agentic, competitors }: AgenticDashboardProps
                   improvement={improvement}
                   onApprove={approveImprovement}
                   priorityColors={priorityColors}
-                  categoryIcons={categoryIcons}
+                  categoryDetails={categoryDetails}
                 />
               ))
             )}
@@ -198,7 +199,7 @@ export function AgenticDashboard({ agentic, competitors }: AgenticDashboardProps
                   improvement={improvement}
                   onApprove={approveImprovement}
                   priorityColors={priorityColors}
-                  categoryIcons={categoryIcons}
+                  categoryDetails={categoryDetails}
                   showActions
                 />
               ))
@@ -214,16 +215,20 @@ interface ImprovementCardProps {
   improvement: Improvement
   onApprove: (id: string) => Promise<void>
   priorityColors: Record<ImprovementPriority, string>
+<<<<<<< HEAD
+  categoryDetails: Record<ImprovementCategory, { icon: ReactNode; label: string }>
+=======
   categoryIcons: Record<ImprovementCategory, ReactNode>
+>>>>>>> origin/main
   showActions?: boolean
 }
 
-function ImprovementCard({ 
-  improvement, 
-  onApprove, 
-  priorityColors, 
-  categoryIcons,
-  showActions = false 
+function ImprovementCard({
+  improvement,
+  onApprove,
+  priorityColors,
+  categoryDetails,
+  showActions = false
 }: ImprovementCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { suggestion, status } = improvement
@@ -243,8 +248,11 @@ function ImprovementCard({
       <div className="space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3 flex-1">
-            <div className="mt-1">
-              {categoryIcons[suggestion.category]}
+            <div className="mt-1 flex flex-col items-center gap-1 text-center text-muted-foreground min-w-[120px]">
+              {categoryDetails[suggestion.category].icon}
+              <span className="text-xs font-medium">
+                {categoryDetails[suggestion.category].label}
+              </span>
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
