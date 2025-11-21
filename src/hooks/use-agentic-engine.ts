@@ -62,14 +62,15 @@ export function useAgenticEngine(context: SystemContext, config?: Partial<Agenti
     return engine.getImprovementsByStatus(status)
   }, [engine])
 
-  // Auto-run on mount if enabled (only once per session)
   useEffect(() => {
-    const shouldAutoRun = !lastRunTime && engine.getConfig().enabled
-    if (shouldAutoRun && context.prospects.length > 0) {
+    const hasProspects = context.prospects.length > 0
+    const shouldAutoRun = !lastRunTime && engine.getConfig().enabled && hasProspects
+
+    if (shouldAutoRun) {
       console.log('🤖 Auto-running initial agentic cycle...')
       runCycle()
     }
-  }, []) // Empty deps - only run once on mount
+  }, [context.prospects.length, engine, lastRunTime, runCycle])
 
   return {
     engine,
