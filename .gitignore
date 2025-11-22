@@ -37,6 +37,7 @@ pids
 .spark-workbench-id
 
 # Scraper output files
+chat-exports-all-112125/
 output.json
 enriched-data.json
 batch-results/
