@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure main branch ref is available
+        run: |
+          if ! git show-ref --verify --quiet refs/remotes/origin/main; then
+            echo "origin/main not found locally. Attempting to fetch..."
+            git fetch origin main || echo "⚠️ Unable to fetch origin/main. Continuing without diff."
+          fi
+
+      - name: Diff with main if present
+        run: |
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git diff origin/main HEAD
+          else
+            echo "origin/main branch is unavailable; skipping diff step."
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build

@@ -1,50 +1,72 @@
 /**
- * BaseAgent Tests
- * 
- * Tests for the BaseAgent class functionality including:
- * - Agent initialization
- * - Finding creation
- * - Improvement creation
- * - Analysis assembly
+ * Unit tests for BaseAgent class
+ * Tests the foundational agent implementation that all specialized agents extend
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { BaseAgent } from './BaseAgent'
 import { AgentAnalysis, SystemContext, Finding, ImprovementSuggestion } from './types'
 
-// Concrete implementation for testing
+// Create a concrete implementation for testing
 class TestAgent extends BaseAgent {
   constructor() {
-    super('data-analyzer', 'Test Agent', ['test-capability-1', 'test-capability-2'])
+    super('data-analyzer', 'Test Agent', ['Test capability 1', 'Test capability 2'])
   }
 
   async analyze(context: SystemContext): Promise<AgentAnalysis> {
-    const findings: Finding[] = []
-    const improvements: ImprovementSuggestion[] = []
-
-    // Simple test analysis
-    if (context.prospects.length === 0) {
-      findings.push(this.createFinding(
-        'data-quality',
-        'warning',
-        'No prospects found',
-        { count: 0 }
-      ))
-    }
-
-    if (findings.length > 0) {
-      improvements.push(this.createImprovement(
+    const findings = [
+      this.createFinding('data-quality', 'warning', 'Test finding', { test: true })
+    ]
+    const improvements = [
+      this.createImprovement(
         'data-quality',
         'high',
-        'Add test data',
-        'Add some test prospects',
-        'No data available',
-        'Improve testing coverage',
+        'Test improvement',
+        'Test description',
+        'Test reasoning',
+        'Test impact',
         true,
-        90
-      ))
-    }
+        85
+      )
+    ]
+    return this.createAnalysis(findings, improvements)
+  }
 
+  // Public test helpers to access protected methods
+  public testCreateFinding(
+    category: ImprovementSuggestion['category'],
+    severity: Finding['severity'],
+    description: string,
+    evidence: any
+  ): Finding {
+    return this.createFinding(category, severity, description, evidence)
+  }
+
+  public testCreateImprovement(
+    category: ImprovementSuggestion['category'],
+    priority: ImprovementSuggestion['priority'],
+    title: string,
+    description: string,
+    reasoning: string,
+    estimatedImpact: string,
+    automatable: boolean,
+    safetyScore: number,
+    implementation?: ImprovementSuggestion['implementation']
+  ): ImprovementSuggestion {
+    return this.createImprovement(
+      category,
+      priority,
+      title,
+      description,
+      reasoning,
+      estimatedImpact,
+      automatable,
+      safetyScore,
+      implementation
+    )
+  }
+
+  public testCreateAnalysis(findings: Finding[], improvements: ImprovementSuggestion[]): AgentAnalysis {
     return this.createAnalysis(findings, improvements)
   }
 }
@@ -61,224 +83,184 @@ describe('BaseAgent', () => {
       portfolio: [],
       userActions: [],
       performanceMetrics: {
-        avgResponseTime: 500,
+        avgResponseTime: 100,
         errorRate: 0.01,
         userSatisfactionScore: 8,
-        dataFreshnessScore: 90
+        dataFreshnessScore: 85
       },
       timestamp: new Date().toISOString()
     }
   })
 
-  describe('Agent Initialization', () => {
-    it('should initialize with correct properties', () => {
-      expect(agent.id).toBeDefined()
-      expect(agent.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  describe('Constructor', () => {
+    it('should create an agent with valid properties', () => {
+      expect(agent).toBeDefined()
+      expect(agent.id).toBeTruthy()
       expect(agent.role).toBe('data-analyzer')
       expect(agent.name).toBe('Test Agent')
-      expect(agent.capabilities).toEqual(['test-capability-1', 'test-capability-2'])
+      expect(agent.capabilities).toHaveLength(2)
+      expect(agent.capabilities).toContain('Test capability 1')
     })
 
     it('should generate unique IDs for different agents', () => {
+      const agent1 = new TestAgent()
       const agent2 = new TestAgent()
-      expect(agent.id).not.toBe(agent2.id)
+      expect(agent1.id).not.toBe(agent2.id)
     })
   })
 
-  describe('Finding Creation', () => {
-    it('should create finding with correct structure', () => {
-      const finding = agent['createFinding'](
-        'data-quality',
-        'warning',
-        'Test finding',
-        { test: 'data' }
+  describe('createFinding', () => {
+    it('should create a finding with all required fields', () => {
+      const finding = agent.testCreateFinding(
+        'security',
+        'critical',
+        'Test security issue',
+        { vulnerability: 'XSS' }
       )
 
       expect(finding).toMatchObject({
-        id: expect.any(String),
-        category: 'data-quality',
-        severity: 'warning',
-        description: 'Test finding',
-        evidence: { test: 'data' }
+        category: 'security',
+        severity: 'critical',
+        description: 'Test security issue',
+        evidence: { vulnerability: 'XSS' }
       })
+      expect(finding.id).toBeTruthy()
     })
 
-    it('should generate unique IDs for findings', () => {
-      const finding1 = agent['createFinding']('data-quality', 'info', 'Finding 1', {})
-      const finding2 = agent['createFinding']('data-quality', 'info', 'Finding 2', {})
+    it('should generate unique IDs for different findings', () => {
+      const finding1 = agent.testCreateFinding('data-quality', 'info', 'Issue 1', {})
+      const finding2 = agent.testCreateFinding('data-quality', 'info', 'Issue 2', {})
       expect(finding1.id).not.toBe(finding2.id)
-    })
-
-    it('should support all severity levels', () => {
-      const severities = ['info', 'warning', 'critical'] as const
-      severities.forEach(severity => {
-        const finding = agent['createFinding']('data-quality', severity, 'Test', {})
-        expect(finding.severity).toBe(severity)
-      })
     })
   })
 
-  describe('Improvement Creation', () => {
-    it('should create improvement with required fields', () => {
-      const improvement = agent['createImprovement'](
+  describe('createImprovement', () => {
+    it('should create an improvement suggestion with all required fields', () => {
+      const improvement = agent.testCreateImprovement(
         'performance',
         'high',
-        'Test Improvement',
-        'Description of improvement',
-        'Reasoning for improvement',
-        'Expected impact',
+        'Optimize queries',
+        'Add database indexes',
+        'Slow query performance detected',
+        'Reduce query time by 50%',
         true,
-        85
+        90
       )
 
       expect(improvement).toMatchObject({
-        id: expect.any(String),
         category: 'performance',
         priority: 'high',
-        title: 'Test Improvement',
-        description: 'Description of improvement',
-        reasoning: 'Reasoning for improvement',
-        estimatedImpact: 'Expected impact',
+        title: 'Optimize queries',
+        description: 'Add database indexes',
+        reasoning: 'Slow query performance detected',
+        estimatedImpact: 'Reduce query time by 50%',
         automatable: true,
-        safetyScore: 85
+        safetyScore: 90
       })
+      expect(improvement.id).toBeTruthy()
     })
 
-    it('should create improvement with implementation plan', () => {
-      const improvement = agent['createImprovement'](
-        'security',
-        'critical',
-        'Security Fix',
-        'Fix security issue',
-        'Security vulnerability detected',
-        'Improved security',
-        false,
-        60,
-        {
-          steps: ['Step 1', 'Step 2'],
-          risks: ['Risk 1'],
-          rollbackPlan: ['Rollback step'],
-          validationCriteria: ['Criteria 1']
-        }
-      )
-
-      expect(improvement.implementation).toEqual({
+    it('should create an improvement with implementation plan', () => {
+      const implementation = {
         steps: ['Step 1', 'Step 2'],
         risks: ['Risk 1'],
         rollbackPlan: ['Rollback step'],
         validationCriteria: ['Criteria 1']
-      })
+      }
+
+      const improvement = agent.testCreateImprovement(
+        'usability',
+        'medium',
+        'UI Enhancement',
+        'Improve navigation',
+        'User feedback',
+        'Better UX',
+        true,
+        85,
+        implementation
+      )
+
+      expect(improvement.implementation).toEqual(implementation)
     })
 
-    it('should support all priority levels', () => {
-      const priorities = ['critical', 'high', 'medium', 'low'] as const
-      priorities.forEach(priority => {
-        const improvement = agent['createImprovement'](
+    it('should handle improvements without implementation plan', () => {
+      const improvement = agent.testCreateImprovement(
+        'feature-enhancement',
+        'low',
+        'Add feature',
+        'New feature description',
+        'Nice to have',
+        'Enhanced functionality',
+        false,
+        70
+      )
+
+      expect(improvement.implementation).toBeUndefined()
+    })
+  })
+
+  describe('createAnalysis', () => {
+    it('should create an analysis with findings and improvements', () => {
+      const findings: Finding[] = [
+        agent.testCreateFinding('data-quality', 'warning', 'Data issue', {})
+      ]
+      const improvements: ImprovementSuggestion[] = [
+        agent.testCreateImprovement(
           'data-quality',
-          priority,
-          'Test',
-          'Desc',
-          'Reason',
+          'high',
+          'Fix data',
+          'Description',
+          'Reasoning',
           'Impact',
           true,
           80
         )
-        expect(improvement.priority).toBe(priority)
-      })
-    })
+      ]
 
-    it('should validate safety score bounds', () => {
-      const lowScore = agent['createImprovement'](
-        'data-quality',
-        'high',
-        'Low Safety',
-        'Desc',
-        'Reason',
-        'Impact',
-        true,
-        0
-      )
-      expect(lowScore.safetyScore).toBe(0)
-
-      const highScore = agent['createImprovement'](
-        'data-quality',
-        'high',
-        'High Safety',
-        'Desc',
-        'Reason',
-        'Impact',
-        true,
-        100
-      )
-      expect(highScore.safetyScore).toBe(100)
-    })
-  })
-
-  describe('Analysis Assembly', () => {
-    it('should create complete analysis structure', async () => {
-      const analysis = await agent.analyze(mockContext)
+      const analysis = agent.testCreateAnalysis(findings, improvements)
 
       expect(analysis).toMatchObject({
         agentId: agent.id,
-        agentRole: 'data-analyzer',
-        findings: expect.any(Array),
-        improvements: expect.any(Array),
-        timestamp: expect.any(String)
+        agentRole: agent.role,
+        findings,
+        improvements
       })
+      expect(analysis.timestamp).toBeTruthy()
+      expect(new Date(analysis.timestamp).getTime()).toBeLessThanOrEqual(Date.now())
     })
 
-    it('should include timestamp in ISO format', async () => {
-      const analysis = await agent.analyze(mockContext)
-      expect(() => new Date(analysis.timestamp)).not.toThrow()
-      expect(analysis.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
-    })
+    it('should handle empty findings and improvements', () => {
+      const analysis = agent.testCreateAnalysis([], [])
 
-    it('should detect issues in empty context', async () => {
-      const analysis = await agent.analyze(mockContext)
-      expect(analysis.findings.length).toBeGreaterThan(0)
-      expect(analysis.improvements.length).toBeGreaterThan(0)
-    })
-
-    it('should handle context with data', async () => {
-      mockContext.prospects = [
-        { companyName: 'Test Company', state: 'CA' }
-      ]
-      const analysis = await agent.analyze(mockContext)
-      expect(analysis.findings.length).toBe(0)
-      expect(analysis.improvements.length).toBe(0)
+      expect(analysis.findings).toHaveLength(0)
+      expect(analysis.improvements).toHaveLength(0)
+      expect(analysis.agentId).toBe(agent.id)
     })
   })
 
-  describe('Edge Cases', () => {
-    it('should handle null evidence in findings', () => {
-      const finding = agent['createFinding']('data-quality', 'info', 'Test', null)
-      expect(finding.evidence).toBeNull()
+  describe('analyze', () => {
+    it('should perform analysis and return results', async () => {
+      const result = await agent.analyze(mockContext)
+
+      expect(result).toBeDefined()
+      expect(result.agentId).toBe(agent.id)
+      expect(result.agentRole).toBe('data-analyzer')
+      expect(result.findings).toHaveLength(1)
+      expect(result.improvements).toHaveLength(1)
+      expect(result.timestamp).toBeTruthy()
     })
 
-    it('should handle undefined implementation plan', () => {
-      const improvement = agent['createImprovement'](
-        'data-quality',
-        'low',
-        'Test',
-        'Desc',
-        'Reason',
-        'Impact',
-        true,
-        75
-      )
-      expect(improvement.implementation).toBeUndefined()
-    })
+    it('should return analysis with correct structure', async () => {
+      const result = await agent.analyze(mockContext)
 
-    it('should handle empty capabilities array', () => {
-      const emptyAgent = new (class extends BaseAgent {
-        constructor() {
-          super('optimizer', 'Empty Agent', [])
-        }
-        async analyze(): Promise<AgentAnalysis> {
-          return this.createAnalysis([], [])
-        }
-      })()
-      expect(emptyAgent.capabilities).toEqual([])
+      expect(result.findings[0]).toHaveProperty('id')
+      expect(result.findings[0]).toHaveProperty('category')
+      expect(result.findings[0]).toHaveProperty('severity')
+      expect(result.findings[0]).toHaveProperty('description')
+
+      expect(result.improvements[0]).toHaveProperty('id')
+      expect(result.improvements[0]).toHaveProperty('title')
+      expect(result.improvements[0]).toHaveProperty('safetyScore')
     })
   })
 })

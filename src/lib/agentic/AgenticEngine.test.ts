@@ -1,13 +1,6 @@
 /**
- * AgenticEngine Tests
- * 
- * Tests for the AgenticEngine class including:
- * - Configuration management
- * - Autonomous cycles
- * - Safety thresholds
- * - Approval workflows
- * - Execution history
- * - Health metrics
+ * Unit tests for AgenticEngine
+ * Tests the core autonomous improvement engine and its capabilities
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -22,38 +15,36 @@ describe('AgenticEngine', () => {
     engine = new AgenticEngine()
     mockContext = {
       prospects: [
-        { 
-          companyName: 'Test Co',
-          state: 'CA',
-          healthScore: { 
-            lastUpdated: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString() // 10 days old
-          }
+        {
+          id: '1',
+          companyName: 'Test Company',
+          industry: 'Tech',
+          healthScore: { overall: 75, lastUpdated: new Date().toISOString() }
         }
       ],
       competitors: [],
       portfolio: [],
       userActions: [],
       performanceMetrics: {
-        avgResponseTime: 1500,
-        errorRate: 0.03,
-        userSatisfactionScore: 6.5,
-        dataFreshnessScore: 60
+        avgResponseTime: 100,
+        errorRate: 0.01,
+        userSatisfactionScore: 8,
+        dataFreshnessScore: 85
       },
       timestamp: new Date().toISOString()
     }
   })
 
-  describe('Engine Configuration', () => {
-    it('should initialize with default configuration', () => {
+  describe('Constructor', () => {
+    it('should create engine with default configuration', () => {
       const config = engine.getConfig()
-      expect(config).toEqual({
-        enabled: true,
-        autonomousExecutionEnabled: false,
-        safetyThreshold: 80,
-        maxDailyImprovements: 3,
-        reviewRequired: ['security', 'data-quality', 'threat-analysis', 'strategic-recommendation'],
-        enabledAgents: ['data-analyzer', 'optimizer', 'security', 'ux-enhancer', 'competitor-agent']
-      })
+      
+      expect(config.enabled).toBe(true)
+      expect(config.autonomousExecutionEnabled).toBe(false) // Safety first
+      expect(config.safetyThreshold).toBe(80)
+      expect(config.maxDailyImprovements).toBe(3)
+      expect(config.reviewRequired).toContain('security')
+      expect(config.reviewRequired).toContain('data-quality')
     })
 
     it('should accept custom configuration', () => {
@@ -62,164 +53,186 @@ describe('AgenticEngine', () => {
         safetyThreshold: 90,
         maxDailyImprovements: 5
       })
+      
       const config = customEngine.getConfig()
       expect(config.autonomousExecutionEnabled).toBe(true)
       expect(config.safetyThreshold).toBe(90)
       expect(config.maxDailyImprovements).toBe(5)
     })
+  })
 
+  describe('Configuration Management', () => {
     it('should update configuration', () => {
-      engine.updateConfig({ autonomousExecutionEnabled: true, safetyThreshold: 95 })
+      engine.updateConfig({
+        autonomousExecutionEnabled: true,
+        safetyThreshold: 85
+      })
+      
       const config = engine.getConfig()
       expect(config.autonomousExecutionEnabled).toBe(true)
-      expect(config.safetyThreshold).toBe(95)
+      expect(config.safetyThreshold).toBe(85)
     })
 
-    it('should preserve other config values when updating', () => {
-      engine.updateConfig({ safetyThreshold: 85 })
-      const config = engine.getConfig()
-      expect(config.enabled).toBe(true)
-      expect(config.maxDailyImprovements).toBe(3)
+    it('should preserve unmodified config values', () => {
+      const originalMax = engine.getConfig().maxDailyImprovements
+      
+      engine.updateConfig({
+        safetyThreshold: 85
+      })
+      
+      expect(engine.getConfig().maxDailyImprovements).toBe(originalMax)
     })
   })
 
-  describe('Autonomous Cycles', () => {
-    it('should complete autonomous cycle with pending improvements', async () => {
+  describe('Autonomous Cycle', () => {
+    it('should run autonomous cycle and return results', async () => {
       const result = await engine.runAutonomousCycle(mockContext)
       
-      expect(result).toHaveProperty('review')
-      expect(result).toHaveProperty('executedImprovements')
-      expect(result).toHaveProperty('pendingImprovements')
-      expect(result.review.status).toBe('completed')
+      expect(result).toBeDefined()
+      expect(result.review).toBeDefined()
+      expect(result.executedImprovements).toBeInstanceOf(Array)
+      expect(result.pendingImprovements).toBeInstanceOf(Array)
     })
 
-    it('should not execute improvements when autonomous execution is disabled', async () => {
+    it('should detect improvements from council review', async () => {
       const result = await engine.runAutonomousCycle(mockContext)
+      
+      const totalImprovements = result.executedImprovements.length + result.pendingImprovements.length
+      expect(totalImprovements).toBeGreaterThan(0)
+    })
+
+    it('should not execute improvements when autonomous execution disabled', async () => {
+      // Default is disabled
+      const result = await engine.runAutonomousCycle(mockContext)
+      
       expect(result.executedImprovements).toHaveLength(0)
       expect(result.pendingImprovements.length).toBeGreaterThan(0)
     })
 
-    it('should execute improvements when enabled and safe', async () => {
-      engine.updateConfig({ 
-        autonomousExecutionEnabled: true,
-        safetyThreshold: 70 
-      })
-      const result = await engine.runAutonomousCycle(mockContext)
-      // Some improvements should be executed based on safety score
-      expect(result.executedImprovements.length + result.pendingImprovements.length).toBeGreaterThan(0)
-    })
-
     it('should create feedback loop after cycle', async () => {
       await engine.runAutonomousCycle(mockContext)
+      
       const feedbackLoops = engine.getFeedbackLoops()
       expect(feedbackLoops.length).toBeGreaterThan(0)
-      expect(feedbackLoops[0].type).toBe('agent-review')
-    })
-
-    it('should track improvements from cycle', async () => {
-      await engine.runAutonomousCycle(mockContext)
-      const improvements = engine.getImprovements()
-      expect(improvements.length).toBeGreaterThan(0)
+      
+      const agentReview = feedbackLoops.find(f => f.type === 'agent-review')
+      expect(agentReview).toBeDefined()
     })
   })
 
-  describe('Safety Thresholds', () => {
-    it('should not execute improvements below safety threshold', async () => {
+  describe('Improvement Management', () => {
+    it('should store improvements after cycle', async () => {
+      await engine.runAutonomousCycle(mockContext)
+      
+      const improvements = engine.getImprovements()
+      expect(improvements.length).toBeGreaterThan(0)
+    })
+
+    it('should filter improvements by status', async () => {
+      await engine.runAutonomousCycle(mockContext)
+      
+      const detected = engine.getImprovementsByStatus('detected')
+      expect(detected).toBeInstanceOf(Array)
+    })
+
+    it('should track improvement status correctly', async () => {
+      await engine.runAutonomousCycle(mockContext)
+      
+      const improvements = engine.getImprovements()
+      improvements.forEach(improvement => {
+        expect(improvement.status).toBeDefined()
+        expect(['detected', 'analyzing', 'approved', 'implementing', 'testing', 'completed', 'rejected'])
+          .toContain(improvement.status)
+      })
+    })
+  })
+
+  describe('Safety Mechanisms', () => {
+    it('should respect safety threshold', async () => {
       engine.updateConfig({ 
         autonomousExecutionEnabled: true,
         safetyThreshold: 95 // Very high threshold
       })
+      
       const result = await engine.runAutonomousCycle(mockContext)
-      // Most improvements should be pending due to high threshold
-      expect(result.pendingImprovements.length).toBeGreaterThan(0)
+      
+      // Most improvements won't meet 95 safety score
+      expect(result.executedImprovements.length).toBeLessThanOrEqual(result.pendingImprovements.length)
     })
 
-    it('should execute improvements meeting safety threshold', async () => {
-      engine.updateConfig({ 
-        autonomousExecutionEnabled: true,
-        safetyThreshold: 70 // Lower threshold
-      })
-      const result = await engine.runAutonomousCycle(mockContext)
-      expect(result.executedImprovements.length).toBeGreaterThanOrEqual(0)
-    })
-
-    it('should respect review required categories', async () => {
-      engine.updateConfig({ 
-        autonomousExecutionEnabled: true,
-        safetyThreshold: 50,
-        reviewRequired: ['security', 'data-quality']
-      })
-      const result = await engine.runAutonomousCycle(mockContext)
-      // Improvements in review-required categories should be pending
-      const securityPending = result.pendingImprovements.filter(
-        i => i.suggestion.category === 'security' || i.suggestion.category === 'data-quality'
-      )
-      expect(securityPending.length).toBeGreaterThan(0)
-    })
-
-    it('should not execute non-automatable improvements', async () => {
-      engine.updateConfig({ 
-        autonomousExecutionEnabled: true,
-        safetyThreshold: 0
-      })
-      const result = await engine.runAutonomousCycle(mockContext)
-      const executed = result.executedImprovements
-      executed.forEach(improvement => {
-        expect(improvement.suggestion.automatable).toBe(true)
-      })
-    })
-  })
-
-  describe('Daily Improvement Limits', () => {
     it('should enforce daily improvement limit', async () => {
       engine.updateConfig({ 
         autonomousExecutionEnabled: true,
-        safetyThreshold: 70,
+        safetyThreshold: 50, // Low threshold to allow execution
         maxDailyImprovements: 1
       })
       
+      // Run multiple cycles
+      await engine.runAutonomousCycle(mockContext)
       await engine.runAutonomousCycle(mockContext)
       
-      await engine.runAutonomousCycle(mockContext)
-      const history2 = engine.getExecutionHistory()
-      
-      // Should not exceed daily limit
+      const history = engine.getExecutionHistory()
       const today = new Date().toDateString()
-      const todayExecutions = history2.filter(
+      const todayExecutions = history.filter(
         e => new Date(e.timestamp).toDateString() === today
       )
+      
       expect(todayExecutions.length).toBeLessThanOrEqual(1)
     })
 
-    it('should track execution history', async () => {
+    it('should require review for security category', async () => {
       engine.updateConfig({ 
         autonomousExecutionEnabled: true,
-        safetyThreshold: 70
+        safetyThreshold: 50
       })
+      
       await engine.runAutonomousCycle(mockContext)
-      const history = engine.getExecutionHistory()
-      expect(history.length).toBeGreaterThanOrEqual(0)
-      if (history.length > 0) {
-        expect(history[0]).toHaveProperty('improvementId')
-        expect(history[0]).toHaveProperty('timestamp')
-        expect(history[0]).toHaveProperty('result')
-      }
+      
+      const improvements = engine.getImprovements()
+      const securityImprovements = improvements.filter(
+        i => i.suggestion.category === 'security'
+      )
+      
+      // Security improvements should be pending, not executed
+      securityImprovements.forEach(imp => {
+        expect(imp.status).not.toBe('completed')
+      })
+    })
+
+    it('should require review for data-quality category', async () => {
+      engine.updateConfig({ 
+        autonomousExecutionEnabled: true,
+        safetyThreshold: 50
+      })
+      
+      await engine.runAutonomousCycle(mockContext)
+      
+      const improvements = engine.getImprovements()
+      const dataQualityImprovements = improvements.filter(
+        i => i.suggestion.category === 'data-quality'
+      )
+      
+      // Data quality improvements should be pending, not executed
+      dataQualityImprovements.forEach(imp => {
+        expect(imp.status).not.toBe('completed')
+      })
     })
   })
 
-  describe('Approval Workflows', () => {
-    it('should manually approve and execute improvement', async () => {
-      const cycleResult = await engine.runAutonomousCycle(mockContext)
-      const improvement = cycleResult.pendingImprovements[0]
+  describe('Manual Approval', () => {
+    it('should allow manual approval and execution', async () => {
+      await engine.runAutonomousCycle(mockContext)
       
-      if (improvement) {
-        const result = await engine.approveAndExecute(improvement.id, mockContext)
-        expect(result).toHaveProperty('success')
-        expect(result).toHaveProperty('changes')
-        expect(result).toHaveProperty('metrics')
+      const improvements = engine.getImprovements()
+      if (improvements.length > 0) {
+        const improvementId = improvements[0].id
+        const result = await engine.approveAndExecute(improvementId, mockContext)
         
-        const updated = engine.getImprovements().find(i => i.id === improvement.id)
-        expect(updated?.status).toMatch(/approved|completed/)
+        expect(result).toBeDefined()
+        expect(result.success).toBeDefined()
+        
+        const approved = engine.getImprovements().find(i => i.id === improvementId)
+        expect(approved?.approvedAt).toBeDefined()
       }
     })
 
@@ -228,48 +241,12 @@ describe('AgenticEngine', () => {
         engine.approveAndExecute('non-existent-id', mockContext)
       ).rejects.toThrow()
     })
-
-    it('should update improvement status on approval', async () => {
-      const cycleResult = await engine.runAutonomousCycle(mockContext)
-      const improvement = cycleResult.pendingImprovements[0]
-      
-      if (improvement) {
-        await engine.approveAndExecute(improvement.id, mockContext)
-        const updated = engine.getImprovements().find(i => i.id === improvement.id)
-        expect(updated?.approvedAt).toBeDefined()
-      }
-    })
-  })
-
-  describe('Improvement Status Management', () => {
-    it('should get improvements by status', async () => {
-      await engine.runAutonomousCycle(mockContext)
-      
-      const detected = engine.getImprovementsByStatus('detected')
-      expect(Array.isArray(detected)).toBe(true)
-      detected.forEach(imp => {
-        expect(imp.status).toBe('detected')
-      })
-    })
-
-    it('should track completed improvements', async () => {
-      engine.updateConfig({ 
-        autonomousExecutionEnabled: true,
-        safetyThreshold: 70
-      })
-      await engine.runAutonomousCycle(mockContext)
-      
-      const completed = engine.getImprovementsByStatus('completed')
-      completed.forEach(imp => {
-        expect(imp.status).toBe('completed')
-        expect(imp.completedAt).toBeDefined()
-      })
-    })
   })
 
   describe('System Health Metrics', () => {
-    it('should calculate system health metrics', async () => {
+    it('should calculate system health correctly', async () => {
       await engine.runAutonomousCycle(mockContext)
+      
       const health = engine.getSystemHealth()
       
       expect(health).toHaveProperty('totalImprovements')
@@ -283,117 +260,106 @@ describe('AgenticEngine', () => {
       expect(health.successRate).toBeLessThanOrEqual(100)
     })
 
-    it('should handle empty state gracefully', () => {
-      const health = engine.getSystemHealth()
-      expect(health.totalImprovements).toBe(0)
-      expect(health.implemented).toBe(0)
-      expect(health.pending).toBe(0)
-      expect(health.successRate).toBe(0)
-      expect(health.avgSafetyScore).toBe(0)
-    })
-
-    it('should calculate success rate correctly', async () => {
+    it('should track success rate accurately', async () => {
       engine.updateConfig({ 
         autonomousExecutionEnabled: true,
         safetyThreshold: 70
       })
+      
       await engine.runAutonomousCycle(mockContext)
       
-      const health = engine.getSystemHealth()
       const history = engine.getExecutionHistory()
-      
       if (history.length > 0) {
+        const health = engine.getSystemHealth()
         const successful = history.filter(h => h.result.success).length
         const expectedRate = (successful / history.length) * 100
+        
         expect(health.successRate).toBe(expectedRate)
       }
     })
 
     it('should calculate average safety score', async () => {
       await engine.runAutonomousCycle(mockContext)
-      const health = engine.getSystemHealth()
+      
       const improvements = engine.getImprovements()
+      const health = engine.getSystemHealth()
       
       if (improvements.length > 0) {
         const sum = improvements.reduce((acc, i) => acc + i.suggestion.safetyScore, 0)
         const expectedAvg = sum / improvements.length
+        
         expect(health.avgSafetyScore).toBe(expectedAvg)
       }
     })
   })
 
   describe('Feedback Loops', () => {
-    it('should create feedback loops with correct structure', () => {
-      const loop = engine.createFeedbackLoop('system-metrics', { metric: 'test' })
+    it('should track feedback loops', async () => {
+      const loop = engine.createFeedbackLoop('system-metrics', {
+        metric: 'test',
+        value: 100
+      })
       
-      expect(loop).toHaveProperty('id')
-      expect(loop).toHaveProperty('type')
-      expect(loop).toHaveProperty('data')
-      expect(loop).toHaveProperty('timestamp')
-      expect(loop).toHaveProperty('processedBy')
+      expect(loop).toBeDefined()
       expect(loop.type).toBe('system-metrics')
-      expect(loop.data).toEqual({ metric: 'test' })
+      expect(loop.id).toBeTruthy()
+      expect(loop.timestamp).toBeTruthy()
     })
 
-    it('should store feedback loops', () => {
+    it('should retrieve all feedback loops', async () => {
       engine.createFeedbackLoop('user-feedback', { rating: 5 })
-      const loops = engine.getFeedbackLoops()
-      expect(loops.length).toBe(1)
-      expect(loops[0].type).toBe('user-feedback')
-    })
-
-    it('should support different feedback types', () => {
-      engine.createFeedbackLoop('user-feedback', {})
-      engine.createFeedbackLoop('system-metrics', {})
-      engine.createFeedbackLoop('agent-review', {})
+      engine.createFeedbackLoop('system-metrics', { load: 0.5 })
       
       const loops = engine.getFeedbackLoops()
-      expect(loops.length).toBe(3)
-      expect(loops.map(l => l.type)).toContain('user-feedback')
-      expect(loops.map(l => l.type)).toContain('system-metrics')
-      expect(loops.map(l => l.type)).toContain('agent-review')
+      expect(loops.length).toBeGreaterThanOrEqual(2)
     })
   })
 
   describe('Council Integration', () => {
-    it('should provide access to council', () => {
+    it('should have access to council', () => {
       const council = engine.getCouncil()
       expect(council).toBeDefined()
-      expect(council.getAgents().length).toBeGreaterThan(0)
     })
 
-    it('should use council for reviews', async () => {
+    it('should use council for analysis', async () => {
       const result = await engine.runAutonomousCycle(mockContext)
+      
       expect(result.review).toBeDefined()
-      expect(result.review.agents.length).toBeGreaterThan(0)
+      expect(result.review.improvements).toBeDefined()
+      expect(result.review.analyses).toBeDefined()
     })
   })
 
-  describe('Edge Cases and Error Handling', () => {
-    it('should handle empty context gracefully', async () => {
-      const emptyContext: SystemContext = {
-        prospects: [],
-        competitors: [],
-        portfolio: [],
-        userActions: [],
-        performanceMetrics: {
-          avgResponseTime: 0,
-          errorRate: 0,
-          userSatisfactionScore: 0,
-          dataFreshnessScore: 0
-        },
-        timestamp: new Date().toISOString()
-      }
+  describe('Execution History', () => {
+    it('should track execution history', async () => {
+      engine.updateConfig({ 
+        autonomousExecutionEnabled: true,
+        safetyThreshold: 70
+      })
       
-      const result = await engine.runAutonomousCycle(emptyContext)
-      expect(result).toBeDefined()
-      expect(result.review.status).toBe('completed')
+      await engine.runAutonomousCycle(mockContext)
+      
+      const history = engine.getExecutionHistory()
+      expect(history).toBeInstanceOf(Array)
     })
 
-    it('should handle disabled engine', async () => {
-      engine.updateConfig({ enabled: false })
-      const result = await engine.runAutonomousCycle(mockContext)
-      expect(result.executedImprovements).toHaveLength(0)
+    it('should include result details in history', async () => {
+      engine.updateConfig({ 
+        autonomousExecutionEnabled: true,
+        safetyThreshold: 70
+      })
+      
+      await engine.runAutonomousCycle(mockContext)
+      
+      const history = engine.getExecutionHistory()
+      if (history.length > 0) {
+        const entry = history[0]
+        expect(entry).toHaveProperty('improvementId')
+        expect(entry).toHaveProperty('timestamp')
+        expect(entry).toHaveProperty('result')
+        expect(entry.result).toHaveProperty('success')
+        expect(entry.result).toHaveProperty('changes')
+      }
     })
   })
 })

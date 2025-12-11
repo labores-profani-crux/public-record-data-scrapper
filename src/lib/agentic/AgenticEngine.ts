@@ -5,16 +5,19 @@
  * Manages feedback loops, autonomous execution, and system evolution.
  */
 
-import { AgenticCouncil, CouncilReview } from './AgenticCouncil'
-import { 
-  SystemContext, 
-  Improvement, 
+import { AgenticCouncil } from './AgenticCouncil'
+import {
+  SystemContext,
+  Improvement,
   ImprovementStatus,
   FeedbackLoop,
   AgenticConfig,
-  ImprovementResult
+  ImprovementResult,
+  CouncilReview,
+  AgentCallbackPayload
 } from './types'
 import { v4 as uuidv4 } from 'uuid'
+import { AgentCallbackClient } from './AgentCallbackClient'
 
 export class AgenticEngine {
   private council: AgenticCouncil
@@ -26,8 +29,9 @@ export class AgenticEngine {
     timestamp: string
     result: ImprovementResult
   }> = []
+  private callbackClient?: AgentCallbackClient
 
-  constructor(config?: Partial<AgenticConfig>) {
+  constructor(config?: Partial<AgenticConfig>, options?: { callbackClient?: AgentCallbackClient }) {
     this.council = new AgenticCouncil()
     this.config = {
       enabled: true,
@@ -38,6 +42,7 @@ export class AgenticEngine {
       enabledAgents: ['data-analyzer', 'optimizer', 'security', 'ux-enhancer', 'competitor-agent'],
       ...config
     }
+    this.callbackClient = options?.callbackClient
   }
 
   /**
@@ -84,7 +89,16 @@ export class AgenticEngine {
     console.log(`   - Executed: ${executedImprovements.length} improvements`)
     console.log(`   - Pending: ${pendingImprovements.length} improvements`)
 
+    await this.dispatchCallback({ review, executedImprovements, pendingImprovements })
+
     return { review, executedImprovements, pendingImprovements }
+  }
+
+  /**
+   * Registers an agent callback client. Pass `null` to remove the current client.
+   */
+  setCallbackClient(client: AgentCallbackClient | null): void {
+    this.callbackClient = client ?? undefined
   }
 
   /**
@@ -139,7 +153,7 @@ export class AgenticEngine {
     try {
       // Simulate improvement execution
       // In a real system, this would perform actual changes
-      const result = await this.simulateExecution(improvement, context)
+        const result = await this.simulateExecution(improvement, context)
 
       improvement.status = result.success ? 'completed' : 'rejected'
       improvement.completedAt = new Date().toISOString()
@@ -176,18 +190,20 @@ export class AgenticEngine {
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 100))
 
+    const { dataFreshnessScore, avgResponseTime, errorRate, userSatisfactionScore } = context.performanceMetrics
+
     const metricsBefore = {
-      dataCompleteness: 75,
-      performanceScore: 70,
-      securityScore: 65,
-      userSatisfaction: 6.5
+      dataCompleteness: dataFreshnessScore,
+      performanceScore: Math.max(0, Math.min(100, 100 - avgResponseTime / 10)),
+      securityScore: Math.max(0, Math.min(100, 100 - errorRate * 100)),
+      userSatisfaction: userSatisfactionScore
     }
 
     const metricsAfter = {
-      dataCompleteness: 85,
-      performanceScore: 85,
-      securityScore: 80,
-      userSatisfaction: 7.5
+      dataCompleteness: Math.min(100, metricsBefore.dataCompleteness + 10),
+      performanceScore: Math.min(100, metricsBefore.performanceScore + 15),
+      securityScore: Math.min(100, metricsBefore.securityScore + 10),
+      userSatisfaction: Math.min(10, metricsBefore.userSatisfaction + 1)
     }
 
     return {
@@ -249,6 +265,18 @@ export class AgenticEngine {
    */
   getFeedbackLoops(): FeedbackLoop[] {
     return this.feedbackLoops
+  }
+
+  private async dispatchCallback(payload: AgentCallbackPayload): Promise<void> {
+    if (!this.callbackClient) {
+      return
+    }
+
+    try {
+      await this.callbackClient.sendCycleResult(payload)
+    } catch (error) {
+      console.error('⚠️ Failed to send agent callback:', error)
+    }
   }
 
   /**

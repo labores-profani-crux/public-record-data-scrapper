@@ -1,47 +1,31 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react-swc'
-import path from 'path'
+import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
-    // Performance optimizations
-    pool: 'forks', // Use forks for better isolation and performance
-    poolOptions: {
-      forks: {
-        singleFork: false, // Allow multiple worker processes
-        maxForks: 4 // Limit concurrent workers
-      }
-    },
-    fileParallelism: true, // Run test files in parallel
-    testTimeout: 10000, // 10 second default timeout
-    hookTimeout: 10000, // 10 second hook timeout
+    setupFiles: [resolve(__dirname, 'src/test/setup.ts')],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/',
         'src/test/',
-        '**/*.d.ts',
-        '**/*.config.*',
-        '**/dist/**',
-        '**/build/**',
-        '**/*.test.ts',
-        '**/*.test.tsx',
-        '**/*.spec.ts',
-        '**/*.spec.tsx'
+        '**/*.test.{ts,tsx}',
+        '**/*.spec.{ts,tsx}',
       ]
     }
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/lib': path.resolve(__dirname, './src/lib'),
-      '@/components': path.resolve(__dirname, './src/components'),
-      '@/hooks': path.resolve(__dirname, './src/hooks')
+      '@': resolve(__dirname, 'src')
     }
   }
 })

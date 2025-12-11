@@ -8,6 +8,7 @@ export * from './types'
 export * from './BaseAgent'
 export * from './AgenticEngine'
 export * from './AgenticCouncil'
+export * from './AgentCallbackClient'
 
 // Export agent implementations
 export { DataAnalyzerAgent } from './agents/DataAnalyzerAgent'

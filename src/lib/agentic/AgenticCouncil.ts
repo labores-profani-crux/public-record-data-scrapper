@@ -6,23 +6,20 @@
  * to the next agent in sequence.
  */
 
-import { Agent, AgentAnalysis, SystemContext, Improvement, ImprovementStatus, AgentRole } from './types'
+import {
+  Agent,
+  AgentAnalysis,
+  SystemContext,
+  ImprovementStatus,
+  AgentRole,
+  CouncilReview
+} from './types'
 import { DataAnalyzerAgent } from './agents/DataAnalyzerAgent'
 import { OptimizerAgent } from './agents/OptimizerAgent'
 import { SecurityAgent } from './agents/SecurityAgent'
 import { UXEnhancerAgent } from './agents/UXEnhancerAgent'
 import { CompetitorAgent } from './agents/CompetitorAgent'
 import { v4 as uuidv4 } from 'uuid'
-
-export interface CouncilReview {
-  id: string
-  startedAt: string
-  completedAt?: string
-  agents: Agent[]
-  analyses: AgentAnalysis[]
-  improvements: Improvement[]
-  status: 'in-progress' | 'completed' | 'failed'
-}
 
 export class AgenticCouncil {
   private agents: Agent[]
