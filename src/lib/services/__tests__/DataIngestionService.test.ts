@@ -1,490 +1,70 @@
 /**
-<<<<<<< HEAD
- * DataIngestionService Unit Tests
- *
- * Tests for UCC filing data ingestion from various sources
+ * Tests for DataIngestionService
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DataIngestionService } from '../DataIngestionService'
 import {
-  createMockIngestionConfig,
-  createMockDataSource,
-  createMockUCCFiling,
-  createMockFetchResponse,
-  wait,
-  mockConsole
-} from './test-utils'
-=======
- * DataIngestionService Tests
- *
- * Tests for UCC data ingestion service including:
- * - Rate limiting
- * - Circuit breaker pattern
- * - Retry logic
- * - Error handling
- * - Multi-source ingestion
- * - Statistics calculation
- */
-
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { DataIngestionService, type DataSource, type IngestionConfig } from '../DataIngestionService'
+  DataIngestionService,
+  defaultIngestionConfig,
+  type DataSource,
+  type IngestionConfig,
+  type IngestionResult
+} from '../DataIngestionService'
 import type { UCCFiling } from '../../types'
->>>>>>> origin/claude/pick-implementation-016NMwaaexJYbyDuHajpV91B
 
 // Mock fetch globally
 global.fetch = vi.fn()
 
 describe('DataIngestionService', () => {
   let service: DataIngestionService
-<<<<<<< HEAD
-  let consoleMocks: ReturnType<typeof mockConsole>
-
-  beforeEach(() => {
-    const config = createMockIngestionConfig()
-    service = new DataIngestionService(config)
-    consoleMocks = mockConsole()
-    vi.clearAllMocks()
-  })
-
-  afterEach(() => {
-    consoleMocks.restore()
-  })
-
-  describe('ingestData', () => {
-    it('should ingest data from all configured sources', async () => {
-      const mockFilings = [createMockUCCFiling(), createMockUCCFiling()]
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: mockFilings })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      expect(results).toHaveLength(3) // 3 mock sources
-      expect(results.every(r => r.success)).toBe(true)
-    })
-
-    it('should handle source failures gracefully', async () => {
-      vi.mocked(fetch)
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [] }))
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [] }))
-
-      const results = await service.ingestData(['CA'])
-
-      expect(results).toHaveLength(3)
-      expect(results.filter(r => r.success)).toHaveLength(2)
-      expect(results.filter(r => !r.success)).toHaveLength(1)
-      expect(results[1].errors).toContain('Network error')
-    })
-
-    it('should respect state filters', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      await service.ingestData(['CA', 'NY'])
-
-      // Verify fetch was called for the correct states
-      expect(fetch).toHaveBeenCalled()
-    })
-
-    it('should include metadata in results', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [createMockUCCFiling()] })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      results.forEach(result => {
-        expect(result.metadata).toBeDefined()
-        expect(result.metadata.source).toBeTruthy()
-        expect(result.metadata.timestamp).toBeTruthy()
-        expect(result.metadata.recordCount).toBeGreaterThanOrEqual(0)
-        expect(result.metadata.processingTime).toBeGreaterThanOrEqual(0)
-      })
-    })
-
-    it('should collect filings from successful sources', async () => {
-      const filing1 = createMockUCCFiling({ fileNumber: 'CA-001' })
-      const filing2 = createMockUCCFiling({ fileNumber: 'CA-002' })
-
-      vi.mocked(fetch)
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [filing1] }))
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [filing2] }))
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [] }))
-
-      const results = await service.ingestData(['CA'])
-
-      const totalFilings = results.reduce((sum, r) => sum + r.filings.length, 0)
-      expect(totalFilings).toBeGreaterThanOrEqual(2)
-    })
-  })
-
-  describe('rate limiting', () => {
-    it('should respect rate limits for sources', async () => {
-      const config = createMockIngestionConfig({
-        sources: [createMockDataSource({ rateLimit: 2 })], // 2 requests per minute
-        batchSize: 10
-      })
-      service = new DataIngestionService(config)
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      // Make multiple rapid requests
-      const promises = Array(5).fill(null).map(() =>
-        service.ingestData(['CA'])
-      )
-
-      await Promise.all(promises)
-
-      // Should have been rate limited
-      expect(fetch).toHaveBeenCalled()
-    })
-
-    it('should track request counts per source', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      await service.ingestData(['CA'])
-      await wait(100)
-      await service.ingestData(['NY'])
-
-      // Request counts should be tracked internally
-      expect(fetch).toHaveBeenCalled()
-    })
-  })
-
-  describe('circuit breaker', () => {
-    it('should open circuit after consecutive failures', async () => {
-      vi.mocked(fetch).mockRejectedValue(new Error('Service unavailable'))
-
-      // Make multiple requests to trigger circuit breaker
-      for (let i = 0; i < 6; i++) {
-        await service.ingestData(['CA']).catch(() => {})
-      }
-
-      // Circuit should be open now
-      const result = await service.ingestData(['CA'])
-      expect(result.some(r => !r.success)).toBe(true)
-    })
-
-    it('should close circuit after successful request in half-open state', async () => {
-      // Fail first to open circuit
-      vi.mocked(fetch).mockRejectedValueOnce(new Error('Error'))
-
-      await service.ingestData(['CA']).catch(() => {})
-
-      // Wait for circuit to half-open
-      await wait(100)
-
-      // Succeed to close circuit
-      vi.mocked(fetch).mockResolvedValueOnce(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      const result = await service.ingestData(['CA'])
-      expect(result.some(r => r.success)).toBe(true)
-    })
-  })
-
-  describe('retry logic', () => {
-    it('should retry failed requests', async () => {
-      vi.mocked(fetch)
-        .mockRejectedValueOnce(new Error('Temporary error'))
-        .mockRejectedValueOnce(new Error('Temporary error'))
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [] }))
-
-      const results = await service.ingestData(['CA'])
-
-      // Should succeed after retries
-      expect(results.some(r => r.success)).toBe(true)
-      expect(fetch).toHaveBeenCalledTimes(9) // 3 sources × 3 attempts
-    })
-
-    it('should use exponential backoff for retries', async () => {
-      const startTime = Date.now()
-
-      vi.mocked(fetch)
-        .mockRejectedValueOnce(new Error('Error 1'))
-        .mockRejectedValueOnce(new Error('Error 2'))
-        .mockResolvedValueOnce(createMockFetchResponse({ filings: [] }))
-
-      await service.ingestData(['CA'])
-
-      const endTime = Date.now()
-      const duration = endTime - startTime
-
-      // Should have some delay due to backoff
-      expect(duration).toBeGreaterThan(0)
-    })
-
-    it('should not retry on non-retryable errors', async () => {
-      vi.mocked(fetch).mockRejectedValueOnce(new Error('Invalid API key'))
-
-      const results = await service.ingestData(['CA'])
-
-      // Should fail fast without retries
-      expect(results.some(r => !r.success)).toBe(true)
-    })
-  })
-
-  describe('error handling', () => {
-    it('should handle network errors', async () => {
-      vi.mocked(fetch).mockRejectedValue(new Error('Network error'))
-
-      const results = await service.ingestData(['CA'])
-
-      expect(results.every(r => !r.success)).toBe(true)
-      expect(results.every(r => r.errors.length > 0)).toBe(true)
-    })
-
-    it('should handle malformed API responses', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ invalid: 'data' })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      // Should handle gracefully
-      expect(results).toBeDefined()
-    })
-
-    it('should handle timeout errors', async () => {
-      vi.mocked(fetch).mockImplementation(
-        () => new Promise(() => {}) // Never resolves
-      )
-
-      // This would timeout in real scenario
-      // In test, we just verify it handles the case
-    })
-
-    it('should log errors to console', async () => {
-      vi.mocked(fetch).mockRejectedValue(new Error('Test error'))
-
-      await service.ingestData(['CA'])
-
-      expect(consoleMocks.mocks.error).toHaveBeenCalled()
-    })
-  })
-
-  describe('data validation', () => {
-    it('should validate UCC filing data structure', async () => {
-      const invalidFiling = { invalid: 'data' }
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [invalidFiling] })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      // Should handle invalid data
-      expect(results).toBeDefined()
-    })
-
-    it('should filter out duplicate filings', async () => {
-      const filing = createMockUCCFiling({ fileNumber: 'CA-001' })
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [filing, filing] })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      // Should deduplicate
-      const allFilings = results.flatMap(r => r.filings)
-      const uniqueFileNumbers = new Set(allFilings.map(f => f.fileNumber))
-      expect(uniqueFileNumbers.size).toBeLessThanOrEqual(allFilings.length)
-    })
-  })
-
-  describe('performance', () => {
-    it('should process large batches efficiently', async () => {
-      const largeFilingSet = Array(1000).fill(null).map((_, i) =>
-        createMockUCCFiling({ fileNumber: `CA-${i}` })
-      )
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: largeFilingSet })
-      )
-
-      const startTime = Date.now()
-      const results = await service.ingestData(['CA'])
-      const duration = Date.now() - startTime
-
-      expect(results).toBeDefined()
-      // Should complete in reasonable time
-      expect(duration).toBeLessThan(5000)
-    })
-
-    it('should handle batch size limits', async () => {
-      const config = createMockIngestionConfig({ batchSize: 50 })
-      service = new DataIngestionService(config)
-
-      const largeFilingSet = Array(200).fill(null).map((_, i) =>
-        createMockUCCFiling({ fileNumber: `CA-${i}` })
-      )
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: largeFilingSet })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      // Should process in batches
-      expect(results).toBeDefined()
-    })
-  })
-
-  describe('source types', () => {
-    it('should handle state portal sources', async () => {
-      const config = createMockIngestionConfig({
-        sources: [createMockDataSource({ type: 'state-portal' })]
-      })
-      service = new DataIngestionService(config)
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      expect(results[0].metadata.source).toContain('Portal')
-    })
-
-    it('should handle API sources', async () => {
-      const config = createMockIngestionConfig({
-        sources: [createMockDataSource({ type: 'api', apiKey: 'test-key' })]
-      })
-      service = new DataIngestionService(config)
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      expect(results[0]).toBeDefined()
-    })
-
-    it('should handle database sources', async () => {
-      const config = createMockIngestionConfig({
-        sources: [createMockDataSource({ type: 'database' })]
-      })
-      service = new DataIngestionService(config)
-
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      const results = await service.ingestData(['CA'])
-
-      expect(results[0]).toBeDefined()
-    })
-  })
-
-  describe('concurrent operations', () => {
-    it('should handle concurrent ingestion requests', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [] })
-      )
-
-      const promises = [
-        service.ingestData(['CA']),
-        service.ingestData(['NY']),
-        service.ingestData(['TX'])
-      ]
-
-      const results = await Promise.all(promises)
-
-      expect(results).toHaveLength(3)
-      expect(results.every(r => Array.isArray(r))).toBe(true)
-    })
-
-    it('should maintain state consistency during concurrent operations', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        createMockFetchResponse({ filings: [createMockUCCFiling()] })
-      )
-
-      // Run multiple concurrent operations
-      await Promise.all([
-        service.ingestData(['CA']),
-        service.ingestData(['CA']),
-        service.ingestData(['CA'])
-      ])
-
-      // State should remain consistent
-      expect(true).toBe(true) // Placeholder - would check internal state
-=======
   let mockConfig: IngestionConfig
-  let mockDataSource: DataSource
 
   beforeEach(() => {
+    vi.useFakeTimers()
     vi.clearAllMocks()
-
-    mockDataSource = {
-      id: 'test-api',
-      name: 'Test UCC API',
-      type: 'api',
-      endpoint: 'https://api.test.com/ucc',
-      apiKey: 'test-key-123',
-      rateLimit: 60
-    }
 
     mockConfig = {
-      sources: [mockDataSource],
-      batchSize: 100,
+      sources: [
+        {
+          id: 'test-api',
+          name: 'Test API',
+          type: 'api',
+          endpoint: 'https://api.test.com',
+          apiKey: 'test-key',
+          rateLimit: 10
+        }
+      ],
+      batchSize: 50,
       retryAttempts: 3,
-      retryDelay: 100, // Short delay for testing
+      retryDelay: 1000,
       states: ['NY', 'CA']
     }
 
     service = new DataIngestionService(mockConfig)
   })
 
-  describe('Initialization', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  describe('constructor', () => {
     it('should initialize with config', () => {
       expect(service).toBeDefined()
+      expect(service).toBeInstanceOf(DataIngestionService)
     })
 
-    it('should initialize with default config', () => {
-      const defaultService = new DataIngestionService({
-        sources: [],
-        batchSize: 50,
-        retryAttempts: 2,
-        retryDelay: 1000,
-        states: ['TX']
-      })
+    it('should accept default config', () => {
+      const defaultService = new DataIngestionService(defaultIngestionConfig)
       expect(defaultService).toBeDefined()
-    })
-
-    it('should accept multiple data sources', () => {
-      const multiSourceConfig: IngestionConfig = {
-        sources: [
-          { ...mockDataSource, id: 'source-1' },
-          { ...mockDataSource, id: 'source-2', type: 'database' }
-        ],
-        batchSize: 100,
-        retryAttempts: 3,
-        retryDelay: 1000,
-        states: ['NY']
-      }
-
-      const multiSourceService = new DataIngestionService(multiSourceConfig)
-      expect(multiSourceService).toBeDefined()
     })
   })
 
   describe('ingestData()', () => {
-    it('should return results for all configured states', async () => {
+    it('should ingest data from all configured sources', async () => {
       const mockFilings: UCCFiling[] = [
         {
           id: 'ucc-1',
-          filingDate: '2024-01-01',
+          filingDate: '2024-01-15',
           debtorName: 'Test Company',
           securedParty: 'Test Bank',
           state: 'NY',
@@ -495,196 +75,289 @@ describe('DataIngestionService', () => {
 
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => mockFilings
+        json: async () => [
+          {
+            id: 'ucc-1',
+            filing_date: '2024-01-15',
+            debtor_name: 'Test Company',
+            secured_party: 'Test Bank',
+            status: 'lapsed',
+            filing_type: 'UCC-1'
+          }
+        ]
       } as Response)
 
-      const results = await service.ingestData()
+      const promise = service.ingestData()
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results).toBeDefined()
-      expect(results.length).toBeGreaterThan(0)
-      expect(results[0]).toHaveProperty('success')
-      expect(results[0]).toHaveProperty('filings')
-      expect(results[0]).toHaveProperty('metadata')
+      expect(results).toHaveLength(1)
+      expect(results[0].success).toBe(true)
+      expect(results[0].filings).toHaveLength(2) // 2 states
     })
 
-    it('should use provided states instead of config states', async () => {
+    it('should use default states from config when none provided', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         json: async () => []
       } as Response)
 
-      const results = await service.ingestData(['FL', 'TX'])
+      const promise = service.ingestData()
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results).toBeDefined()
-      // Should attempt to fetch from FL and TX, not NY and CA
+      expect(results).toHaveLength(1)
+      expect(fetch).toHaveBeenCalledTimes(2) // NY and CA
     })
 
-    it('should handle empty source list gracefully', async () => {
-      const emptySourceService = new DataIngestionService({
-        sources: [],
-        batchSize: 100,
-        retryAttempts: 3,
-        retryDelay: 1000,
-        states: ['NY']
-      })
+    it('should use provided states override', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => []
+      } as Response)
 
-      const results = await emptySourceService.ingestData()
-      expect(results).toHaveLength(0)
+      const promise = service.ingestData(['TX'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(fetch).toHaveBeenCalledTimes(1) // Only TX
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('state=TX'),
+        expect.any(Object)
+      )
     })
 
-    it('should collect errors from failed sources', async () => {
+    it('should handle errors from individual sources gracefully', async () => {
       vi.mocked(fetch).mockRejectedValue(new Error('Network error'))
 
-      const results = await service.ingestData()
+      const promise = service.ingestData()
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results).toBeDefined()
+      expect(results).toHaveLength(1)
       expect(results[0].success).toBe(false)
       expect(results[0].errors.length).toBeGreaterThan(0)
+      expect(results[0].filings).toEqual([])
     })
-  })
 
-  describe('Source Type Handling', () => {
-    it('should handle API sources', async () => {
-      const apiSource: DataSource = {
-        ...mockDataSource,
-        type: 'api'
-      }
-
-      const apiService = new DataIngestionService({
-        ...mockConfig,
-        sources: [apiSource]
-      })
-
+    it('should include metadata in results', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         json: async () => []
       } as Response)
 
-      const results = await apiService.ingestData(['NY'])
+      const promise = service.ingestData()
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results).toBeDefined()
-      expect(vi.mocked(fetch)).toHaveBeenCalled()
-    })
-
-    it('should handle state portal sources', async () => {
-      const portalSource: DataSource = {
-        ...mockDataSource,
-        type: 'state-portal'
-      }
-
-      const portalService = new DataIngestionService({
-        ...mockConfig,
-        sources: [portalSource]
-      })
-
-      const results = await portalService.ingestData(['CA'])
-
-      expect(results).toBeDefined()
-      // Portal scraping returns empty array in test mode
-      expect(results[0].filings).toEqual([])
-    })
-
-    it('should handle database sources', async () => {
-      const dbSource: DataSource = {
-        ...mockDataSource,
-        type: 'database'
-      }
-
-      const dbService = new DataIngestionService({
-        ...mockConfig,
-        sources: [dbSource]
-      })
-
-      const results = await dbService.ingestData(['TX'])
-
-      expect(results).toBeDefined()
-      // Database queries return empty array in test mode
-      expect(results[0].filings).toEqual([])
+      expect(results[0].metadata).toBeDefined()
+      expect(results[0].metadata.source).toBe('Test API')
+      expect(results[0].metadata.timestamp).toBeDefined()
+      expect(results[0].metadata.recordCount).toBeDefined()
+      expect(results[0].metadata.processingTime).toBeGreaterThanOrEqual(0)
     })
   })
 
-  describe('API Integration', () => {
-    it('should include API key in request headers', async () => {
+  describe('API fetching', () => {
+    it('should include authorization header when apiKey provided', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         json: async () => []
       } as Response)
 
-      await service.ingestData(['NY'])
+      const promise = service.ingestData()
+      await vi.runAllTimersAsync()
+      await promise
 
-      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        expect.stringContaining('https://api.test.com/ucc'),
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            'Authorization': 'Bearer test-key-123'
+            'Authorization': 'Bearer test-key'
           })
         })
       )
     })
 
-    it('should handle API responses correctly', async () => {
-      const mockAPIResponse = [
-        {
-          id: 'api-filing-1',
-          filing_date: '2023-01-15',
-          debtor_name: 'API Test Corp',
-          secured_party: 'API Test Lender',
-          status: 'lapsed',
-          filing_type: 'UCC-1',
-          lien_amount: 50000
-        }
-      ]
-
+    it('should include correct query parameters', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => mockAPIResponse
+        json: async () => []
       } as Response)
 
-      const results = await service.ingestData(['NY'])
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      await promise
 
-      expect(results[0].filings.length).toBeGreaterThan(0)
-      expect(results[0].filings[0]).toHaveProperty('debtorName')
-      expect(results[0].filings[0]).toHaveProperty('securedParty')
-      expect(results[0].filings[0]).toHaveProperty('state', 'NY')
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test.com/filings?state=NY&status=lapsed',
+        expect.any(Object)
+      )
     })
 
-    it('should handle HTTP errors', async () => {
+    it('should transform API response to UCCFiling format', async () => {
       vi.mocked(fetch).mockResolvedValue({
-        ok: false,
-        status: 500
+        ok: true,
+        json: async () => [
+          {
+            id: 'api-123',
+            filing_date: '2024-01-15',
+            debtor_name: 'Tech Corp',
+            secured_party: 'Bank One',
+            lien_amount: 50000,
+            status: 'active',
+            filing_type: 'UCC-1'
+          }
+        ]
       } as Response)
 
-      const results = await service.ingestData(['NY'])
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results[0].success).toBe(false)
-      expect(results[0].errors.length).toBeGreaterThan(0)
+      const filing = results[0].filings[0]
+      expect(filing).toMatchObject({
+        id: 'api-123',
+        filingDate: '2024-01-15',
+        debtorName: 'Tech Corp',
+        securedParty: 'Bank One',
+        state: 'NY',
+        lienAmount: 50000,
+        status: 'active',
+        filingType: 'UCC-1'
+      })
     })
 
-    it('should not retry 4xx client errors (except 429)', async () => {
+    it('should handle non-array API responses gracefully', async () => {
       vi.mocked(fetch).mockResolvedValue({
-        ok: false,
-        status: 404
+        ok: true,
+        json: async () => ({ error: 'Invalid response' })
       } as Response)
 
-      const results = await service.ingestData(['NY'])
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results[0].success).toBe(false)
-      // Should fail quickly without retries for 404
+      expect(results[0].filings).toEqual([])
     })
   })
 
-  describe('Rate Limiting', () => {
-    it('should enforce rate limits', async () => {
-      const rateLimitedSource: DataSource = {
-        ...mockDataSource,
-        rateLimit: 2 // Only 2 requests per minute
+  describe('retry logic', () => {
+    it('should retry on 5xx server errors', async () => {
+      vi.mocked(fetch)
+        .mockRejectedValueOnce(new Error('HTTP error! status: 500'))
+        .mockRejectedValueOnce(new Error('HTTP error! status: 502'))
+        .mockResolvedValue({
+          ok: true,
+          json: async () => []
+        } as Response)
+
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(fetch).toHaveBeenCalledTimes(3) // 2 retries + 1 success
+      expect(results[0].success).toBe(true)
+    })
+
+    it('should not retry on 4xx client errors', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({})
+      } as Response)
+
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      // Should fail without retries
+      expect(results[0].success).toBe(false)
+    })
+
+    it('should retry on 429 rate limit errors', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          json: async () => ({})
+        } as Response)
+        .mockResolvedValue({
+          ok: true,
+          json: async () => []
+        } as Response)
+
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(results[0].success).toBe(true)
+    })
+
+    it('should respect retry attempts configuration', async () => {
+      const customConfig: IngestionConfig = {
+        ...mockConfig,
+        retryAttempts: 2
+      }
+      const customService = new DataIngestionService(customConfig)
+
+      vi.mocked(fetch).mockRejectedValue(new Error('HTTP error! status: 500'))
+
+      const promise = customService.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(fetch).toHaveBeenCalledTimes(2) // Initial + 1 retry (max 2 attempts)
+      expect(results[0].success).toBe(false)
+    })
+  })
+
+  describe('circuit breaker', () => {
+    it('should create circuit breaker for each source', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => []
+      } as Response)
+
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      await promise
+
+      // Circuit breaker should be created and used
+      expect(fetch).toHaveBeenCalled()
+    })
+
+    it('should open circuit after threshold failures', async () => {
+      vi.mocked(fetch).mockRejectedValue(new Error('Service unavailable'))
+
+      // Trigger multiple failures
+      for (let i = 0; i < 6; i++) {
+        const promise = service.ingestData(['NY'])
+        await vi.runAllTimersAsync()
+        await promise.catch(() => {})
       }
 
-      const rateLimitedService = new DataIngestionService({
+      // Circuit should be open now, but service still returns error results
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(results[0].success).toBe(false)
+    })
+  })
+
+  describe('rate limiting', () => {
+    it('should enforce rate limit per source', async () => {
+      const limitedConfig: IngestionConfig = {
         ...mockConfig,
-        sources: [rateLimitedSource],
-        states: ['NY', 'CA', 'TX'] // 3 states, exceeds rate limit
-      })
+        sources: [{
+          ...mockConfig.sources[0],
+          rateLimit: 2 // Only 2 requests per minute
+        }],
+        states: ['NY', 'CA', 'TX'] // 3 states
+      }
+      const limitedService = new DataIngestionService(limitedConfig)
 
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
@@ -692,95 +365,39 @@ describe('DataIngestionService', () => {
       } as Response)
 
       const startTime = Date.now()
-      await rateLimitedService.ingestData()
-      const duration = Date.now() - startTime
+      const promise = limitedService.ingestData()
 
-      // Should have delayed due to rate limiting
-      expect(duration).toBeGreaterThan(0)
-    }, 70000) // Increase timeout for rate limiting test
+      // Advance time to simulate rate limiting
+      await vi.advanceTimersByTimeAsync(0) // First 2 requests immediate
+      await vi.advanceTimersByTimeAsync(60000) // Wait for rate limit window
+      await vi.advanceTimersByTimeAsync(0) // Third request
 
-    it('should track request timestamps per source', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: true,
-        json: async () => []
-      } as Response)
+      const results = await promise
 
-      // Make multiple requests
-      await service.ingestData(['NY'])
-      await service.ingestData(['CA'])
-
-      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(0)
-    })
-  })
-
-  describe('Error Handling & Retry Logic', () => {
-    it('should retry on network failures', async () => {
-      let attemptCount = 0
-      vi.mocked(fetch).mockImplementation(() => {
-        attemptCount++
-        if (attemptCount < 3) {
-          return Promise.reject(new Error('Network timeout'))
-        }
-        return Promise.resolve({
-          ok: true,
-          json: async () => []
-        } as Response)
-      })
-
-      const results = await service.ingestData(['NY'])
-
-      expect(attemptCount).toBeGreaterThan(1)
       expect(results[0].success).toBe(true)
+      expect(fetch).toHaveBeenCalledTimes(3)
     })
 
-    it('should give up after max retry attempts', async () => {
-      vi.mocked(fetch).mockRejectedValue(new Error('Persistent failure'))
-
-      const results = await service.ingestData(['NY'])
-
-      expect(results[0].success).toBe(false)
-      expect(results[0].errors.length).toBeGreaterThan(0)
-    })
-
-    it('should use exponential backoff for retries', async () => {
-      const delays: number[] = []
-      let attemptCount = 0
-
-      vi.mocked(fetch).mockImplementation(() => {
-        const timestamp = Date.now()
-        if (attemptCount > 0) {
-          delays.push(timestamp)
-        }
-        attemptCount++
-
-        if (attemptCount < 3) {
-          return Promise.reject(new Error('Retry test'))
-        }
-        return Promise.resolve({
-          ok: true,
-          json: async () => []
-        } as Response)
-      })
-
-      await service.ingestData(['NY'])
-
-      expect(attemptCount).toBeGreaterThan(1)
-    })
-  })
-
-  describe('Circuit Breaker', () => {
-    it('should create circuit breaker per source', async () => {
+    it('should track requests per source separately', async () => {
       const multiSourceConfig: IngestionConfig = {
+        ...mockConfig,
         sources: [
-          { ...mockDataSource, id: 'source-1' },
-          { ...mockDataSource, id: 'source-2' }
-        ],
-        batchSize: 100,
-        retryAttempts: 3,
-        retryDelay: 100,
-        states: ['NY']
+          {
+            id: 'source-1',
+            name: 'Source 1',
+            type: 'api',
+            endpoint: 'https://api1.test.com',
+            rateLimit: 10
+          },
+          {
+            id: 'source-2',
+            name: 'Source 2',
+            type: 'api',
+            endpoint: 'https://api2.test.com',
+            rateLimit: 10
+          }
+        ]
       }
-
       const multiService = new DataIngestionService(multiSourceConfig)
 
       vi.mocked(fetch).mockResolvedValue({
@@ -788,92 +405,116 @@ describe('DataIngestionService', () => {
         json: async () => []
       } as Response)
 
-      const results = await multiService.ingestData()
+      const promise = multiService.ingestData()
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results.length).toBe(2)
-    })
-
-    it('should open circuit after multiple failures', async () => {
-      // Simulate multiple failures to trip circuit breaker
-      vi.mocked(fetch).mockRejectedValue(new Error('Service unavailable'))
-
-      const results1 = await service.ingestData(['NY'])
-      const results2 = await service.ingestData(['NY'])
-
-      expect(results1[0].success).toBe(false)
-      expect(results2[0].success).toBe(false)
+      expect(results).toHaveLength(2)
+      expect(results[0].success).toBe(true)
+      expect(results[1].success).toBe(true)
     })
   })
 
   describe('findLapsedFilings()', () => {
-    it('should filter lapsed filings by age', async () => {
-      const mockFilings = [
-        {
-          id: 'recent',
-          filingDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: 'lapsed' as const,
-          debtorName: 'Recent Corp',
-          securedParty: 'Bank',
-          state: 'NY',
-          filingType: 'UCC-1' as const
-        },
-        {
-          id: 'old',
-          filingDate: new Date(Date.now() - 4 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: 'lapsed' as const,
-          debtorName: 'Old Corp',
-          securedParty: 'Bank',
-          state: 'NY',
-          filingType: 'UCC-1' as const
-        }
-      ]
+    it('should filter lapsed filings by minimum days', async () => {
+      const oldDate = new Date()
+      oldDate.setDate(oldDate.getDate() - 1100) // > 3 years ago
 
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => mockFilings
+        json: async () => [
+          {
+            id: 'ucc-1',
+            filing_date: oldDate.toISOString().split('T')[0],
+            debtor_name: 'Old Company',
+            secured_party: 'Bank',
+            status: 'lapsed',
+            filing_type: 'UCC-1'
+          }
+        ]
       } as Response)
 
-      const lapsedFilings = await service.findLapsedFilings(1095) // 3 years
+      const promise = service.findLapsedFilings(1095) // 3 years
+      await vi.runAllTimersAsync()
+      const lapsedFilings = await promise
 
-      expect(lapsedFilings.length).toBeGreaterThanOrEqual(0)
-      lapsedFilings.forEach(filing => {
-        expect(filing.status).toBe('lapsed')
-      })
+      expect(lapsedFilings.length).toBeGreaterThan(0)
+      expect(lapsedFilings[0].status).toBe('lapsed')
+    })
+
+    it('should exclude filings not lapsed long enough', async () => {
+      const recentDate = new Date()
+      recentDate.setDate(recentDate.getDate() - 100) // Only 100 days ago
+
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => [
+          {
+            id: 'ucc-2',
+            filing_date: recentDate.toISOString().split('T')[0],
+            debtor_name: 'Recent Company',
+            secured_party: 'Bank',
+            status: 'lapsed',
+            filing_type: 'UCC-1'
+          }
+        ]
+      } as Response)
+
+      const promise = service.findLapsedFilings(1095) // 3 years
+      await vi.runAllTimersAsync()
+      const lapsedFilings = await promise
+
+      expect(lapsedFilings).toHaveLength(0)
     })
 
     it('should exclude non-lapsed filings', async () => {
-      const mockFilings = [
-        {
-          id: 'active',
-          filingDate: '2020-01-01',
-          status: 'active' as const,
-          debtorName: 'Active Corp',
-          securedParty: 'Bank',
-          state: 'NY',
-          filingType: 'UCC-1' as const
-        }
-      ]
+      const oldDate = new Date()
+      oldDate.setDate(oldDate.getDate() - 1100)
 
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => mockFilings
+        json: async () => [
+          {
+            id: 'ucc-3',
+            filing_date: oldDate.toISOString().split('T')[0],
+            debtor_name: 'Active Company',
+            secured_party: 'Bank',
+            status: 'active', // Not lapsed
+            filing_type: 'UCC-1'
+          }
+        ]
       } as Response)
 
-      const lapsedFilings = await service.findLapsedFilings()
+      const promise = service.findLapsedFilings()
+      await vi.runAllTimersAsync()
+      const lapsedFilings = await promise
 
-      expect(lapsedFilings).toEqual([])
+      expect(lapsedFilings).toHaveLength(0)
+    })
+
+    it('should use default 3 years when minDaysLapsed not specified', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => []
+      } as Response)
+
+      const promise = service.findLapsedFilings()
+      await vi.runAllTimersAsync()
+      const lapsedFilings = await promise
+
+      expect(lapsedFilings).toBeDefined()
     })
   })
 
   describe('getStatistics()', () => {
-    it('should calculate total records', () => {
-      const mockResults = [
+    it('should calculate correct statistics', () => {
+      const mockResults: IngestionResult[] = [
         {
           success: true,
           filings: [{} as UCCFiling, {} as UCCFiling],
           errors: [],
           metadata: {
-            source: 'Test',
+            source: 'Source 1',
             timestamp: new Date().toISOString(),
             recordCount: 2,
             processingTime: 1000
@@ -884,10 +525,21 @@ describe('DataIngestionService', () => {
           filings: [{} as UCCFiling],
           errors: [],
           metadata: {
-            source: 'Test2',
+            source: 'Source 2',
             timestamp: new Date().toISOString(),
             recordCount: 1,
             processingTime: 500
+          }
+        },
+        {
+          success: false,
+          filings: [],
+          errors: ['Error 1', 'Error 2'],
+          metadata: {
+            source: 'Source 3',
+            timestamp: new Date().toISOString(),
+            recordCount: 0,
+            processingTime: 100
           }
         }
       ]
@@ -895,102 +547,12 @@ describe('DataIngestionService', () => {
       const stats = service.getStatistics(mockResults)
 
       expect(stats.totalRecords).toBe(3)
+      expect(stats.successRate).toBeCloseTo(66.67, 1)
+      expect(stats.avgProcessingTime).toBeCloseTo(533.33, 1)
+      expect(stats.errorCount).toBe(2)
     })
 
-    it('should calculate success rate', () => {
-      const mockResults = [
-        {
-          success: true,
-          filings: [],
-          errors: [],
-          metadata: {
-            source: 'Test',
-            timestamp: new Date().toISOString(),
-            recordCount: 0,
-            processingTime: 1000
-          }
-        },
-        {
-          success: false,
-          filings: [],
-          errors: ['Error 1'],
-          metadata: {
-            source: 'Test2',
-            timestamp: new Date().toISOString(),
-            recordCount: 0,
-            processingTime: 500
-          }
-        }
-      ]
-
-      const stats = service.getStatistics(mockResults)
-
-      expect(stats.successRate).toBe(50)
-    })
-
-    it('should calculate average processing time', () => {
-      const mockResults = [
-        {
-          success: true,
-          filings: [],
-          errors: [],
-          metadata: {
-            source: 'Test',
-            timestamp: new Date().toISOString(),
-            recordCount: 0,
-            processingTime: 1000
-          }
-        },
-        {
-          success: true,
-          filings: [],
-          errors: [],
-          metadata: {
-            source: 'Test2',
-            timestamp: new Date().toISOString(),
-            recordCount: 0,
-            processingTime: 2000
-          }
-        }
-      ]
-
-      const stats = service.getStatistics(mockResults)
-
-      expect(stats.avgProcessingTime).toBe(1500)
-    })
-
-    it('should count total errors', () => {
-      const mockResults = [
-        {
-          success: false,
-          filings: [],
-          errors: ['Error 1', 'Error 2'],
-          metadata: {
-            source: 'Test',
-            timestamp: new Date().toISOString(),
-            recordCount: 0,
-            processingTime: 1000
-          }
-        },
-        {
-          success: false,
-          filings: [],
-          errors: ['Error 3'],
-          metadata: {
-            source: 'Test2',
-            timestamp: new Date().toISOString(),
-            recordCount: 0,
-            processingTime: 500
-          }
-        }
-      ]
-
-      const stats = service.getStatistics(mockResults)
-
-      expect(stats.errorCount).toBe(3)
-    })
-
-    it('should handle empty results gracefully', () => {
+    it('should handle empty results', () => {
       const stats = service.getStatistics([])
 
       expect(stats.totalRecords).toBe(0)
@@ -998,90 +560,173 @@ describe('DataIngestionService', () => {
       expect(stats.avgProcessingTime).toBe(0)
       expect(stats.errorCount).toBe(0)
     })
-  })
 
-  describe('Edge Cases', () => {
-    it('should handle malformed API responses', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: true,
-        json: async () => ({ invalid: 'format' })
-      } as Response)
-
-      const results = await service.ingestData(['NY'])
-
-      expect(results[0].filings).toEqual([])
-    })
-
-    it('should handle null/undefined fields in API response', async () => {
-      const mockResponse = [
+    it('should handle all failures', () => {
+      const mockResults: IngestionResult[] = [
         {
-          id: null,
-          filing_date: undefined,
-          debtor_name: 'Test',
-          secured_party: null
+          success: false,
+          filings: [],
+          errors: ['Error'],
+          metadata: {
+            source: 'Source 1',
+            timestamp: new Date().toISOString(),
+            recordCount: 0,
+            processingTime: 100
+          }
         }
       ]
 
+      const stats = service.getStatistics(mockResults)
+
+      expect(stats.successRate).toBe(0)
+      expect(stats.errorCount).toBe(1)
+    })
+  })
+
+  describe('multiple source types', () => {
+    it('should handle state-portal sources', async () => {
+      const portalConfig: IngestionConfig = {
+        ...mockConfig,
+        sources: [{
+          id: 'ny-portal',
+          name: 'NY Portal',
+          type: 'state-portal',
+          endpoint: 'https://ny.gov/ucc',
+          rateLimit: 10
+        }]
+      }
+      const portalService = new DataIngestionService(portalConfig)
+
+      const promise = portalService.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(results).toHaveLength(1)
+      expect(results[0].metadata.source).toBe('NY Portal')
+    })
+
+    it('should handle database sources', async () => {
+      const dbConfig: IngestionConfig = {
+        ...mockConfig,
+        sources: [{
+          id: 'db-source',
+          name: 'Database',
+          type: 'database',
+          endpoint: 'postgresql://localhost:5432/ucc',
+          rateLimit: 100
+        }]
+      }
+      const dbService = new DataIngestionService(dbConfig)
+
+      const promise = dbService.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(results).toHaveLength(1)
+      expect(results[0].metadata.source).toBe('Database')
+    })
+
+    it('should handle mixed source types', async () => {
+      const mixedConfig: IngestionConfig = {
+        ...mockConfig,
+        sources: [
+          {
+            id: 'api',
+            name: 'API',
+            type: 'api',
+            endpoint: 'https://api.test.com',
+            rateLimit: 10
+          },
+          {
+            id: 'portal',
+            name: 'Portal',
+            type: 'state-portal',
+            endpoint: 'https://portal.test.com',
+            rateLimit: 5
+          }
+        ]
+      }
+      const mixedService = new DataIngestionService(mixedConfig)
+
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => mockResponse
+        json: async () => []
       } as Response)
 
-      const results = await service.ingestData(['NY'])
+      const promise = mixedService.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
 
-      expect(results[0].filings.length).toBeGreaterThan(0)
-      expect(results[0].filings[0].debtorName).toBe('Test')
+      expect(results).toHaveLength(2)
+      expect(results.map(r => r.metadata.source)).toContain('API')
+      expect(results.map(r => r.metadata.source)).toContain('Portal')
     })
+  })
 
-    it('should handle timeout errors', async () => {
-      vi.mocked(fetch).mockRejectedValue(new Error('Request timeout'))
-
-      const results = await service.ingestData(['NY'])
-
-      expect(results[0].success).toBe(false)
-      expect(results[0].errors.length).toBeGreaterThan(0)
-    })
-
-    it('should handle JSON parsing errors', async () => {
+  describe('error handling edge cases', () => {
+    it('should handle malformed JSON responses', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         json: async () => { throw new Error('Invalid JSON') }
       } as Response)
 
-      const results = await service.ingestData(['NY'])
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
 
       expect(results[0].success).toBe(false)
+      expect(results[0].errors.length).toBeGreaterThan(0)
+    })
+
+    it('should handle network timeouts', async () => {
+      vi.mocked(fetch).mockRejectedValue(new Error('timeout'))
+
+      const promise = service.ingestData(['NY'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(results[0].success).toBe(false)
+      expect(results[0].errors.some(e => e.includes('timeout'))).toBe(true)
+    })
+
+    it('should continue processing other states after one fails', async () => {
+      let callCount = 0
+      vi.mocked(fetch).mockImplementation(async (url) => {
+        callCount++
+        if (url.toString().includes('state=NY')) {
+          throw new Error('NY failed')
+        }
+        return {
+          ok: true,
+          json: async () => []
+        } as Response
+      })
+
+      const promise = service.ingestData(['NY', 'CA'])
+      await vi.runAllTimersAsync()
+      const results = await promise
+
+      expect(results[0].success).toBe(false) // NY failed but CA should succeed
+      expect(results[0].errors.some(e => e.includes('NY'))).toBe(true)
+      // NY will retry (3 attempts) + CA (1 attempt) = 4 calls
+      expect(callCount).toBeGreaterThanOrEqual(2) // At least both states attempted
     })
   })
 
-  describe('Metadata Generation', () => {
-    it('should include accurate metadata in results', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: true,
-        json: async () => []
-      } as Response)
-
-      const results = await service.ingestData(['NY'])
-
-      expect(results[0].metadata).toHaveProperty('source')
-      expect(results[0].metadata).toHaveProperty('timestamp')
-      expect(results[0].metadata).toHaveProperty('recordCount')
-      expect(results[0].metadata).toHaveProperty('processingTime')
-      expect(results[0].metadata.processingTime).toBeGreaterThanOrEqual(0)
+  describe('defaultIngestionConfig', () => {
+    it('should have valid default configuration', () => {
+      expect(defaultIngestionConfig.sources).toHaveLength(1)
+      expect(defaultIngestionConfig.batchSize).toBeGreaterThan(0)
+      expect(defaultIngestionConfig.retryAttempts).toBeGreaterThan(0)
+      expect(defaultIngestionConfig.retryDelay).toBeGreaterThan(0)
+      expect(defaultIngestionConfig.states.length).toBeGreaterThan(0)
     })
 
-    it('should have ISO timestamp format', async () => {
-      vi.mocked(fetch).mockResolvedValue({
-        ok: true,
-        json: async () => []
-      } as Response)
-
-      const results = await service.ingestData(['NY'])
-
-      const timestamp = results[0].metadata.timestamp
-      expect(() => new Date(timestamp)).not.toThrow()
-      expect(new Date(timestamp).toISOString()).toBe(timestamp)
->>>>>>> origin/claude/pick-implementation-016NMwaaexJYbyDuHajpV91B
+    it('should include major states', () => {
+      expect(defaultIngestionConfig.states).toContain('NY')
+      expect(defaultIngestionConfig.states).toContain('CA')
+      expect(defaultIngestionConfig.states).toContain('TX')
+      expect(defaultIngestionConfig.states).toContain('FL')
     })
   })
 })
