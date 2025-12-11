@@ -22,7 +22,6 @@ import {
   Users,
   Target,
   LightbulbFilament
-  Target
 } from '@phosphor-icons/react'
 import { Improvement, ImprovementPriority, ImprovementCategory } from '@/lib/agentic/types'
 import { UseAgenticEngineResult } from '@/hooks/use-agentic-engine'
