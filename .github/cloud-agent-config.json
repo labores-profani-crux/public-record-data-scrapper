@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "capabilities": [
       "text-atomization",
-      "visual-analysis", 
+      "visual-analysis",
       "interactive-design",
       "glassmorphism-ui",
       "data-visualization",
@@ -16,13 +16,7 @@
       "output_formats": ["interactive-html", "json-data", "visual-components"]
     },
     "processing": {
-      "atomization_levels": [
-        "theme",
-        "paragraph", 
-        "sentence",
-        "word",
-        "letter"
-      ],
+      "atomization_levels": ["theme", "paragraph", "sentence", "word", "letter"],
       "visualization_types": [
         "hierarchical-tree",
         "interactive-graph",
@@ -38,7 +32,7 @@
     },
     "api_endpoints": {
       "analyze": "/api/analyze",
-      "atomize": "/api/atomize", 
+      "atomize": "/api/atomize",
       "visualize": "/api/visualize",
       "delegate": "/api/delegate"
     },
@@ -73,7 +67,7 @@
     "version_history": [
       {
         "version": "1.0.0",
-        "date": "2024-11-20T20:04:00Z", 
+        "date": "2024-11-20T20:04:00Z",
         "changes": "Initial configuration setup"
       }
     ]
