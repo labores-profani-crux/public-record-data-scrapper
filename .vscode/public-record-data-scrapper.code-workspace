@@ -1,7 +1,7 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"path": ".."
 		}
 	],
 	"settings": {
@@ -21,8 +21,6 @@
 		}
 	},
 	"extensions": {
-		"recommendations": [
-			"vscjava.migrate-java-to-azure"
-		]
+		"recommendations": []
 	}
 }
