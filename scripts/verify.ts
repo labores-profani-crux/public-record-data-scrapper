@@ -131,7 +131,7 @@ async function runChecks() {
   console.log(chalk.bold.blue('\n🔍 UCC Intelligence Platform - System Verification\n'))
 
   let passedChecks = 0
-  let totalChecks = checks.length
+  const totalChecks = checks.length
 
   for (const check of checks) {
     process.stdout.write(chalk.cyan(`Checking ${check.name}... `))
