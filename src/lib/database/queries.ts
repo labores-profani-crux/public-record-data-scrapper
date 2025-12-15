@@ -108,7 +108,7 @@ export class QueryBuilder {
     `
 
     const values = [
-      prospect.id,  // company_id
+      prospect.id, // company_id
       prospect.status || 'new',
       prospect.priorityScore || 0,
       prospect.healthScore?.grade || 'C',
@@ -116,7 +116,7 @@ export class QueryBuilder {
       prospect.defaultDate,
       prospect.timeSinceDefault,
       prospect.estimatedRevenue,
-      null,  // assigned_to
+      null, // assigned_to
       prospect.narrative,
       prospect.tags || [],
       JSON.stringify({})
@@ -186,7 +186,9 @@ export class QueryBuilder {
   /**
    * Create growth signal
    */
-  async createGrowthSignal(signal: Partial<GrowthSignal> & { companyId: string, prospectId: string }): Promise<void> {
+  async createGrowthSignal(
+    signal: Partial<GrowthSignal> & { companyId: string; prospectId: string }
+  ): Promise<void> {
     const query = `
       INSERT INTO growth_signals (
         company_id, prospect_id, signal_type, description,
@@ -203,8 +205,8 @@ export class QueryBuilder {
       signal.source,
       signal.confidence,
       signal.impact,
-      0,  // amount
-      null,  // url
+      0, // amount
+      null, // url
       JSON.stringify(signal)
     ]
 
@@ -243,7 +245,7 @@ export class QueryBuilder {
 
     const values = [
       companyId,
-      new Date().toISOString().split('T')[0],  // Today's date
+      new Date().toISOString().split('T')[0], // Today's date
       healthScore.overall,
       healthScore.factors.paymentHistory,
       healthScore.factors.onlineReputation,
@@ -280,7 +282,7 @@ export class QueryBuilder {
         financialStability: row.financial_stability_score
       },
       trends: {
-        improving: false,  // Would need historical comparison
+        improving: false, // Would need historical comparison
         recentChanges: []
       },
       lastUpdated: row.created_at
@@ -331,7 +333,7 @@ export class QueryBuilder {
   /**
    * Get data source performance
    */
-  async getDataSourcePerformance(): Promise<any[]> {
+  async getDataSourcePerformance(): Promise<unknown[]> {
     const query = 'SELECT * FROM v_data_source_performance ORDER BY total_requests DESC'
     const result = await this.client.query(query)
     return result.rows
@@ -355,13 +357,27 @@ export class QueryBuilder {
   /**
    * Bulk insert (for performance)
    */
-  async bulkInsert(table: string, columns: string[], values: any[][]): Promise<void> {
+  async bulkInsert(table: string, columns: string[], values: unknown[][]): Promise<void> {
     if (values.length === 0) return
 
-    const placeholders = values.map((_, i) => {
-      const rowPlaceholders = columns.map((_, j) => `$${i * columns.length + j + 1}`)
-      return `(${rowPlaceholders.join(', ')})`
-    }).join(', ')
+    // Validate table name (alphanumeric and underscores only)
+    if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+      throw new Error(`Invalid table name: ${table}`)
+    }
+
+    // Validate column names
+    for (const column of columns) {
+      if (!/^[a-zA-Z0-9_]+$/.test(column)) {
+        throw new Error(`Invalid column name: ${column}`)
+      }
+    }
+
+    const placeholders = values
+      .map((_, i) => {
+        const rowPlaceholders = columns.map((_, j) => `$${i * columns.length + j + 1}`)
+        return `(${rowPlaceholders.join(', ')})`
+      })
+      .join(', ')
 
     const query = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${placeholders}`
     const flatValues = values.flat()
