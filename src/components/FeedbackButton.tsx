@@ -88,6 +88,7 @@ export function FeedbackButton() {
         size="sm"
         onClick={() => setOpen(true)}
         className="glass-effect border-white/30 text-white hover:bg-white/10 flex items-center gap-2"
+        aria-label="Give Feedback"
       >
         <ChatCircleDots size={16} weight="bold" />
         <span className="hidden sm:inline">Give Feedback</span>
@@ -111,7 +112,7 @@ export function FeedbackButton() {
                 value={feedbackData.component}
                 onValueChange={(value) => setFeedbackData({ ...feedbackData, component: value })}
               >
-                <SelectTrigger id="component" className="glass-effect border-white/30 text-white">
+                <SelectTrigger id="component" className="glass-effect border-white/30 text-white" aria-required="true">
                   <SelectValue placeholder="Select a component" />
                 </SelectTrigger>
                 <SelectContent className="glass-effect border-white/30">
@@ -138,7 +139,7 @@ export function FeedbackButton() {
                 value={feedbackData.feedbackType}
                 onValueChange={(value) => setFeedbackData({ ...feedbackData, feedbackType: value })}
               >
-                <SelectTrigger id="feedbackType" className="glass-effect border-white/30 text-white">
+                <SelectTrigger id="feedbackType" className="glass-effect border-white/30 text-white" aria-required="true">
                   <SelectValue placeholder="Select feedback type" />
                 </SelectTrigger>
                 <SelectContent className="glass-effect border-white/30">
@@ -161,7 +162,7 @@ export function FeedbackButton() {
                 value={feedbackData.priority}
                 onValueChange={(value) => setFeedbackData({ ...feedbackData, priority: value })}
               >
-                <SelectTrigger id="priority" className="glass-effect border-white/30 text-white">
+                <SelectTrigger id="priority" className="glass-effect border-white/30 text-white" aria-required="true">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent className="glass-effect border-white/30">
@@ -181,7 +182,7 @@ export function FeedbackButton() {
                 value={feedbackData.deviceType}
                 onValueChange={(value) => setFeedbackData({ ...feedbackData, deviceType: value })}
               >
-                <SelectTrigger id="deviceType" className="glass-effect border-white/30 text-white">
+                <SelectTrigger id="deviceType" className="glass-effect border-white/30 text-white" aria-required="true">
                   <SelectValue placeholder="Select device type" />
                 </SelectTrigger>
                 <SelectContent className="glass-effect border-white/30">
@@ -203,6 +204,8 @@ export function FeedbackButton() {
                 value={feedbackData.description}
                 onChange={(e) => setFeedbackData({ ...feedbackData, description: e.target.value })}
                 className="glass-effect border-white/30 text-white placeholder:text-white/50 min-h-[100px]"
+                required
+                aria-required="true"
               />
             </div>
 

@@ -312,7 +312,7 @@ CTA: [improved call to action]`;
     // In a real implementation, fetch actual prospect data
     const prospectData = this.getProspectData(prospectId);
 
-    let prompt = `Generate a ${channel} outreach template for this prospect:
+    const prompt = `Generate a ${channel} outreach template for this prospect:
 
 Company: ${prospectData.companyName}
 Industry: ${prospectData.industry}
