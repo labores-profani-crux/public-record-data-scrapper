@@ -166,6 +166,8 @@ export function ProspectCard({ prospect, onSelect }: ProspectCardProps) {
               size="sm" 
               className="flex-1 text-xs sm:text-sm h-8 sm:h-9"
               disabled={isClaimed}
+              aria-label={isClaimed ? (prospect.claimedBy ? `Claimed by ${prospect.claimedBy}` : 'Claimed') : `View details for ${prospect.companyName}`}
+              title={isClaimed ? (prospect.claimedBy ? `Claimed by ${prospect.claimedBy}` : 'Claimed') : `View details for ${prospect.companyName}`}
             >
               <Buildings size={14} weight="fill" className="mr-1 sm:mr-2 sm:w-4 sm:h-4" />
               {isClaimed ? 'Claimed' : 'View Details'}
