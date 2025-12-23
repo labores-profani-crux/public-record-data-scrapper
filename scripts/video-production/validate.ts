@@ -6,7 +6,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { loadConfig } from './video-generator.js';
+import { loadConfig } from './video-generator';
 
 async function validate() {
   console.log('🔍 Validating Video Production Agent Setup...\n');

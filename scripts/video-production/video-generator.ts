@@ -21,6 +21,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
 
+// Constants
+const WORDS_PER_MINUTE = 150;
+const DEFAULT_CROSSFADE_DURATION = 0.5; // seconds
+
 interface Config {
   repoRoot: string;
   scriptDir: string;
@@ -58,6 +62,37 @@ interface RenderLog {
   outputPath?: string;
   errors: string[];
   success: boolean;
+}
+
+interface TimelineScene {
+  index: number;
+  startTime: number;
+  endTime: number;
+  visual: string;
+  heading: string;
+}
+
+interface Timeline {
+  audio: string;
+  scenes: TimelineScene[];
+}
+
+/**
+ * Escape string for safe use in shell commands
+ */
+function escapeShellArg(arg: string): string {
+  return arg.replace(/'/g, "'\\''");
+}
+
+/**
+ * Convert glob pattern to regex
+ */
+function globToRegex(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/\./g, '\\.')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`);
 }
 
 class VideoProductionAgent {
@@ -107,8 +142,7 @@ class VideoProductionAgent {
     
     try {
       const files = await fs.readdir(scriptDir);
-      const pattern = this.config.scriptPattern.replace('*', '.*');
-      const regex = new RegExp(pattern);
+      const regex = globToRegex(this.config.scriptPattern);
       
       const matchingFiles = files
         .filter(file => regex.test(file))
@@ -183,9 +217,9 @@ class VideoProductionAgent {
     // Detect scenes based on markdown headings
     const scenes = this.detectSceneBoundaries(content);
     
-    // Calculate approximate duration (150 words per minute)
+    // Calculate approximate duration
     const wordCount = content.split(/\s+/).length;
-    const duration = Math.ceil((wordCount / 150) * 60); // seconds
+    const duration = Math.ceil((wordCount / WORDS_PER_MINUTE) * 60); // seconds
 
     return {
       filePath: scriptPath,
@@ -209,15 +243,16 @@ class VideoProductionAgent {
     let currentTime = 0;
 
     for (const line of lines) {
-      // Detect H2 or H3 headings as scene markers
-      const headingMatch = line.match(/^##\s+(.+)|^###\s+Voiceover:/);
+      // Detect H2 headings or H3 Voiceover sections as scene markers
+      const h2Match = line.match(/^##\s+(.+)/);
+      const h3VoiceoverMatch = line.match(/^###\s+Voiceover:/);
       
-      if (headingMatch) {
+      if (h2Match || h3VoiceoverMatch) {
         // Save previous scene if exists
         if (currentScene) {
           const text = currentContent.join('\n');
           const wordCount = text.split(/\s+/).length;
-          const duration = (wordCount / 150) * 60; // seconds
+          const duration = (wordCount / WORDS_PER_MINUTE) * 60; // seconds
           
           currentScene.content = text;
           currentScene.startTime = currentTime;
@@ -228,10 +263,11 @@ class VideoProductionAgent {
         }
 
         // Start new scene
+        const heading = h2Match ? h2Match[1] : 'Voiceover';
         currentScene = {
           index: sceneIndex++,
-          heading: headingMatch[1] || 'Voiceover',
-          visualType: this.determineVisualType(headingMatch[1] || ''),
+          heading,
+          visualType: this.determineVisualType(heading),
         };
         currentContent = [];
       } else if (currentScene && line.trim() && !line.startsWith('#')) {
@@ -246,7 +282,7 @@ class VideoProductionAgent {
     if (currentScene) {
       const text = currentContent.join('\n');
       const wordCount = text.split(/\s+/).length;
-      const duration = (wordCount / 150) * 60;
+      const duration = (wordCount / WORDS_PER_MINUTE) * 60;
       
       currentScene.content = text;
       currentScene.startTime = currentTime;
@@ -357,20 +393,26 @@ class VideoProductionAgent {
     // Try different TTS engines based on platform
     const platform = process.platform;
     
+    // Sanitize text for shell safety
+    const safeText = escapeShellArg(text);
+    const safeOutputPath = escapeShellArg(outputPath);
+    
     try {
       if (platform === 'darwin') {
         // macOS: use 'say' command
         const tempPath = outputPath.replace('.mp3', '.aiff');
-        execSync(`say -v Samantha -o "${tempPath}" "${text.replace(/"/g, '\\"')}"`);
+        const safeTempPath = escapeShellArg(tempPath);
+        execSync(`say -v Samantha -o '${safeTempPath}' '${safeText}'`);
         // Convert to mp3
-        execSync(`ffmpeg -i "${tempPath}" -acodec libmp3lame -y "${outputPath}"`);
+        execSync(`ffmpeg -i '${safeTempPath}' -acodec libmp3lame -y '${safeOutputPath}'`);
         await fs.unlink(tempPath);
       } else if (platform === 'linux') {
         // Linux: use espeak
         try {
           const tempPath = outputPath.replace('.mp3', '.wav');
-          execSync(`espeak -v en-us -s 150 -w "${tempPath}" "${text.replace(/"/g, '\\"')}"`);
-          execSync(`ffmpeg -i "${tempPath}" -acodec libmp3lame -y "${outputPath}"`);
+          const safeTempPath = escapeShellArg(tempPath);
+          execSync(`espeak -v en-us -s 150 -w '${safeTempPath}' '${safeText}'`);
+          execSync(`ffmpeg -i '${safeTempPath}' -acodec libmp3lame -y '${safeOutputPath}'`);
           await fs.unlink(tempPath);
         } catch {
           // Fallback to festival
@@ -378,8 +420,10 @@ class VideoProductionAgent {
           const tempFile = outputPath.replace('.mp3', '.txt');
           await fs.writeFile(tempFile, text);
           const tempPath = outputPath.replace('.mp3', '.wav');
-          execSync(`text2wave "${tempFile}" -o "${tempPath}"`);
-          execSync(`ffmpeg -i "${tempPath}" -acodec libmp3lame -y "${outputPath}"`);
+          const safeTempFile = escapeShellArg(tempFile);
+          const safeTempPath = escapeShellArg(tempPath);
+          execSync(`text2wave '${safeTempFile}' -o '${safeTempPath}'`);
+          execSync(`ffmpeg -i '${safeTempPath}' -acodec libmp3lame -y '${safeOutputPath}'`);
           await fs.unlink(tempFile);
           await fs.unlink(tempPath);
         }
@@ -389,8 +433,8 @@ class VideoProductionAgent {
     } catch (error) {
       log.fallbacksUsed.push('silent_audio_fallback');
       // Generate silent audio as last resort
-      const duration = Math.ceil(text.split(/\s+/).length / 150 * 60);
-      execSync(`ffmpeg -f lavfi -i anullsrc=r=48000:cl=mono -t ${duration} -y "${outputPath}"`);
+      const duration = Math.ceil(text.split(/\s+/).length / WORDS_PER_MINUTE * 60);
+      execSync(`ffmpeg -f lavfi -i anullsrc=r=48000:cl=mono -t ${duration} -y '${safeOutputPath}'`);
     }
   }
 
@@ -503,20 +547,21 @@ class VideoProductionAgent {
   private async generateTitleCard(scene: SceneInfo, outputPath: string): Promise<string> {
     const [width, height] = this.config.videoResolution.split('x').map(Number);
     
-    // Use FFmpeg to generate title card
+    // Use FFmpeg to generate title card with safe escaping
     const title = scene.heading.replace(/[^\w\s]/g, '').substring(0, 50);
-    const escapedTitle = title.replace(/'/g, "\\'");
+    const safeTitle = escapeShellArg(title);
+    const safeOutputPath = escapeShellArg(outputPath);
     
     const cmd = `ffmpeg -f lavfi -i color=c=0x1e2b5c:s=${width}x${height}:d=1 ` +
-      `-vf "drawtext=text='${escapedTitle}':fontcolor=white:fontsize=72:` +
+      `-vf "drawtext=text='${title}':fontcolor=white:fontsize=72:` +
       `x=(w-text_w)/2:y=(h-text_h)/2" ` +
-      `-frames:v 1 -y "${outputPath}"`;
+      `-frames:v 1 -y '${safeOutputPath}'`;
     
     try {
       execSync(cmd, { stdio: 'pipe' });
     } catch (error) {
-      // Fallback to solid color
-      execSync(`ffmpeg -f lavfi -i color=c=0x1e2b5c:s=${width}x${height}:d=1 -frames:v 1 -y "${outputPath}"`, { stdio: 'pipe' });
+      // Fallback to solid color without text
+      execSync(`ffmpeg -f lavfi -i color=c=0x1e2b5c:s=${width}x${height}:d=1 -frames:v 1 -y '${safeOutputPath}'`, { stdio: 'pipe' });
     }
     
     return outputPath;
@@ -582,7 +627,7 @@ class VideoProductionAgent {
   ): Promise<string> {
     console.log('🎬 Step 6: Rendering final video...');
     
-    const timeline = JSON.parse(await fs.readFile(timelinePath, 'utf-8'));
+    const timeline: Timeline = JSON.parse(await fs.readFile(timelinePath, 'utf-8'));
     const outputFileName = metadata.fileName.replace(/\.(md|txt)$/, '.mp4');
     const outputPath = path.join(this.config.videoOutDir, outputFileName);
 
@@ -590,22 +635,24 @@ class VideoProductionAgent {
       // Build FFmpeg filter complex for scene transitions
       const filterComplex = this.buildFilterComplex(timeline, this.config.fps);
       
-      // Create FFmpeg command
-      const inputs = [timeline.audio, ...timeline.scenes.map((s: any) => s.visual)];
-      const inputArgs = inputs.map(i => `-i "${i}"`).join(' ');
+      // Create FFmpeg command with safe escaping
+      const inputs = [timeline.audio, ...timeline.scenes.map(s => s.visual)];
+      const inputArgs = inputs.map(i => `-i '${escapeShellArg(i)}'`).join(' ');
       
       const [width, height] = this.config.videoResolution.split('x').map(Number);
+      const safeOutputPath = escapeShellArg(outputPath);
       
       const cmd = `ffmpeg ${inputArgs} ` +
-        `-filter_complex "${filterComplex}" ` +
+        `-filter_complex '${filterComplex}' ` +
         `-map "[outv]" -map 0:a ` +
         `-c:v libx264 -preset medium -crf 23 ` +
         `-c:a aac -b:a 192k ` +
         `-r ${this.config.fps} ` +
         `-s ${width}x${height} ` +
-        `-y "${outputPath}"`;
+        `-y '${safeOutputPath}'`;
 
       console.log('  Executing FFmpeg render (this may take a while)...');
+      // Note: Large maxBuffer for video rendering. For very large videos, consider streaming approach
       execSync(cmd, { stdio: 'inherit', maxBuffer: 1024 * 1024 * 100 });
       
       return outputPath;
@@ -618,9 +665,13 @@ class VideoProductionAgent {
         log.fallbacksUsed.push('simple_video_fallback');
         
         const firstVisual = timeline.scenes[0].visual;
-        const cmd = `ffmpeg -loop 1 -i "${firstVisual}" -i "${timeline.audio}" ` +
+        const safeFirstVisual = escapeShellArg(firstVisual);
+        const safeAudio = escapeShellArg(timeline.audio);
+        const safeOutputPath = escapeShellArg(outputPath);
+        
+        const cmd = `ffmpeg -loop 1 -i '${safeFirstVisual}' -i '${safeAudio}' ` +
           `-c:v libx264 -tune stillimage -c:a aac -b:a 192k ` +
-          `-shortest -pix_fmt yuv420p -y "${outputPath}"`;
+          `-shortest -pix_fmt yuv420p -y '${safeOutputPath}'`;
         
         execSync(cmd, { stdio: 'inherit' });
         return outputPath;
@@ -634,11 +685,11 @@ class VideoProductionAgent {
   /**
    * Build FFmpeg filter complex for scene transitions
    */
-  private buildFilterComplex(timeline: any, fps: number): string {
+  private buildFilterComplex(timeline: Timeline, fps: number): string {
     const filters: string[] = [];
     
     // Scale and pad each input image
-    timeline.scenes.forEach((scene: any, i: number) => {
+    timeline.scenes.forEach((scene, i) => {
       const inputIndex = i + 1; // +1 because 0 is audio
       filters.push(
         `[${inputIndex}:v]scale=1920:1080:force_original_aspect_ratio=decrease,` +
@@ -655,11 +706,11 @@ class VideoProductionAgent {
       
       for (let i = 1; i < timeline.scenes.length; i++) {
         const duration = timeline.scenes[i].startTime - timeline.scenes[i - 1].startTime;
-        const offset = Math.max(0, duration - 0.5); // 0.5s crossfade
+        const offset = Math.max(0, duration - DEFAULT_CROSSFADE_DURATION);
         
         const nextLabel = i === timeline.scenes.length - 1 ? 'outv' : `t${i}`;
         filters.push(
-          `[${currentLabel}][v${i}]xfade=transition=fade:duration=0.5:offset=${offset}[${nextLabel}]`
+          `[${currentLabel}][v${i}]xfade=transition=fade:duration=${DEFAULT_CROSSFADE_DURATION}:offset=${offset}[${nextLabel}]`
         );
         currentLabel = nextLabel;
       }
