@@ -23,6 +23,8 @@
     "scrape": "tsx scripts/cli-scraper.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:test": "tsx scripts/db-test.ts",
+    "video:generate": "bash scripts/video-production/generate-videos.sh",
+    "video:help": "bash scripts/video-production/generate-videos.sh --help",
     "prepare": "husky"
   },
   "dependencies": {
