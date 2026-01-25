@@ -1,4 +1,3 @@
-// @ts-nocheck - Complex Zod type inference
 /**
  * Data Validation Schemas
  *
@@ -77,13 +76,7 @@ export const IndustryTypeSchema = z.enum([
   'technology'
 ])
 
-export const ProspectStatusSchema = z.enum([
-  'new',
-  'claimed',
-  'contacted',
-  'qualified',
-  'dead'
-])
+export const ProspectStatusSchema = z.enum(['new', 'claimed', 'contacted', 'qualified', 'dead'])
 
 export const ProspectSchema = z.object({
   id: z.string().min(1),
@@ -94,14 +87,20 @@ export const ProspectSchema = z.object({
   priorityScore: z.number().min(0).max(100),
   defaultDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   timeSinceDefault: z.number().int().nonnegative(),
-  lastFilingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  lastFilingDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   uccFilings: z.array(UCCFilingSchema).min(1),
   growthSignals: z.array(GrowthSignalSchema),
   healthScore: HealthScoreSchema,
   narrative: z.string().max(2000),
   estimatedRevenue: z.number().positive().optional(),
   claimedBy: z.string().max(200).optional(),
-  claimedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  claimedDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
 })
 
 export type ProspectInput = z.input<typeof ProspectSchema>
@@ -161,9 +160,11 @@ export const EnrichmentSourceSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   type: z.enum(['web-scraping', 'api', 'ml-inference']),
-  capabilities: z.array(
-    z.enum(['growth-signals', 'health-score', 'revenue-estimate', 'industry-classification'])
-  ).min(1),
+  capabilities: z
+    .array(
+      z.enum(['growth-signals', 'health-score', 'revenue-estimate', 'industry-classification'])
+    )
+    .min(1),
   endpoint: z.string().url().optional(),
   apiKey: z.string().optional()
 })
@@ -331,7 +332,7 @@ export function validateScheduleConfig(data: unknown): ScheduleConfigOutput {
  * Get validation errors in human-readable format
  */
 export function formatValidationErrors(error: z.ZodError): string[] {
-  return error.errors.map(err => {
+  return error.errors.map((err) => {
     const path = err.path.join('.')
     return `${path}: ${err.message}`
   })
@@ -360,21 +361,15 @@ export function createProspectValidator(options: {
   }
 
   if (options.minPriorityScore !== undefined) {
-    schema = schema.refine(
-      data => data.priorityScore >= options.minPriorityScore!,
-      {
-        message: `Priority score must be at least ${options.minPriorityScore}`
-      }
-    )
+    schema = schema.refine((data) => data.priorityScore >= options.minPriorityScore!, {
+      message: `Priority score must be at least ${options.minPriorityScore}`
+    })
   }
 
   if (options.requiredSignalCount !== undefined) {
-    schema = schema.refine(
-      data => data.growthSignals.length >= options.requiredSignalCount!,
-      {
-        message: `Must have at least ${options.requiredSignalCount} growth signals`
-      }
-    )
+    schema = schema.refine((data) => data.growthSignals.length >= options.requiredSignalCount!, {
+      message: `Must have at least ${options.requiredSignalCount} growth signals`
+    })
   }
 
   return schema
