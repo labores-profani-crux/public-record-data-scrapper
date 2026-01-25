@@ -50,10 +50,17 @@ export type SchedulerEventType =
   | 'refresh-completed'
   | 'error'
 
+export interface SchedulerEventData {
+  ingestionResults?: IngestionResult[]
+  enrichmentResults?: { prospectId: string; success: boolean }[]
+  refreshedCount?: number
+  prospectIds?: string[]
+}
+
 export interface SchedulerEvent {
   type: SchedulerEventType
   timestamp: string
-  data?: any
+  data?: SchedulerEventData
   error?: string
 }
 
@@ -158,7 +165,7 @@ export class DataRefreshScheduler {
         this.status.lastIngestionRun = new Date().toISOString()
 
         // Get all filings from results
-        const allFilings = results.flatMap(r => r.filings)
+        const allFilings = results.flatMap((r) => r.filings)
 
         // Enrich the filings into prospects
         const { prospects } = await this.enrichmentService.enrichProspects(
@@ -167,7 +174,7 @@ export class DataRefreshScheduler {
         )
 
         // Store prospects
-        prospects.forEach(p => this.prospects.set(p.id, p))
+        prospects.forEach((p) => this.prospects.set(p.id, p))
         this.status.totalProspectsProcessed += prospects.length
 
         this.emitEvent({
@@ -217,9 +224,8 @@ export class DataRefreshScheduler {
         console.log('Running scheduled enrichment...')
 
         // Get prospects that need enrichment (incomplete data)
-        const prospectsToEnrich = Array.from(this.prospects.values()).filter(p =>
-          !p.estimatedRevenue ||
-          p.growthSignals.length === 0
+        const prospectsToEnrich = Array.from(this.prospects.values()).filter(
+          (p) => !p.estimatedRevenue || p.growthSignals.length === 0
         )
 
         if (prospectsToEnrich.length > 0) {
@@ -290,7 +296,8 @@ export class DataRefreshScheduler {
           let refreshedCount = 0
 
           for (const prospect of staleProspects.slice(0, this.config.enrichmentBatchSize)) {
-            const { prospect: refreshed } = await this.enrichmentService.refreshProspectData(prospect)
+            const { prospect: refreshed } =
+              await this.enrichmentService.refreshProspectData(prospect)
             this.prospects.set(refreshed.id, refreshed)
             refreshedCount++
           }
@@ -335,7 +342,7 @@ export class DataRefreshScheduler {
     const now = new Date()
     const thresholdMs = this.config.staleDataThreshold * 24 * 60 * 60 * 1000
 
-    return Array.from(this.prospects.values()).filter(prospect => {
+    return Array.from(this.prospects.values()).filter((prospect) => {
       const lastUpdate = new Date(prospect.healthScore.lastUpdated)
       const age = now.getTime() - lastUpdate.getTime()
       return age > thresholdMs
@@ -353,13 +360,13 @@ export class DataRefreshScheduler {
     }
 
     const results = await this.ingestionService.ingestData(this.config.ingestionStates)
-    const allFilings = results.flatMap(r => r.filings)
+    const allFilings = results.flatMap((r) => r.filings)
     const { prospects } = await this.enrichmentService.enrichProspects(
       allFilings,
       this.config.enrichmentBatchSize
     )
 
-    prospects.forEach(p => this.prospects.set(p.id, p))
+    prospects.forEach((p) => this.prospects.set(p.id, p))
     this.status.lastIngestionRun = new Date().toISOString()
     this.status.totalProspectsProcessed += prospects.length
 
@@ -418,7 +425,7 @@ export class DataRefreshScheduler {
    * Emit event to all handlers
    */
   private emitEvent(event: SchedulerEvent): void {
-    this.eventHandlers.forEach(handler => {
+    this.eventHandlers.forEach((handler) => {
       try {
         handler(event)
       } catch (error) {

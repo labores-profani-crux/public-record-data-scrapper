@@ -7,8 +7,8 @@
  * - External data providers
  */
 
-import { UCCFiling, Prospect, IndustryType } from '../types'
-import { retry, isRetryableError, CircuitBreaker } from '../utils/retry'
+import { UCCFiling } from '../types'
+import { retry, CircuitBreaker } from '../utils/retry'
 
 export interface DataSource {
   id: string
@@ -37,6 +37,25 @@ export interface IngestionResult {
     recordCount: number
     processingTime: number
   }
+}
+
+/**
+ * Raw API response item from external UCC data sources
+ * Handles various field naming conventions (snake_case and camelCase)
+ */
+interface RawUCCFilingData {
+  id?: string
+  filing_date?: string
+  filingDate?: string
+  debtor_name?: string
+  debtorName?: string
+  secured_party?: string
+  securedParty?: string
+  lien_amount?: number
+  lienAmount?: number
+  status?: string
+  filing_type?: string
+  filingType?: string
 }
 
 export class DataIngestionService {
@@ -91,10 +110,7 @@ export class DataIngestionService {
   /**
    * Ingest data from a specific source
    */
-  private async ingestFromSource(
-    source: DataSource,
-    states: string[]
-  ): Promise<IngestionResult> {
+  private async ingestFromSource(source: DataSource, states: string[]): Promise<IngestionResult> {
     const startTime = Date.now()
     const filings: UCCFiling[] = []
     const errors: string[] = []
@@ -145,10 +161,7 @@ export class DataIngestionService {
   /**
    * Scrape UCC filings from state portal
    */
-  private async scrapeStatePortal(
-    source: DataSource,
-    state: string
-  ): Promise<UCCFiling[]> {
+  private async scrapeStatePortal(source: DataSource, state: string): Promise<UCCFiling[]> {
     // In a real implementation, this would use a headless browser (Playwright/Puppeteer)
     // to scrape state UCC filing portals
 
@@ -165,10 +178,7 @@ export class DataIngestionService {
   /**
    * Fetch UCC filings from external API with retry logic
    */
-  private async fetchFromAPI(
-    source: DataSource,
-    state: string
-  ): Promise<UCCFiling[]> {
+  private async fetchFromAPI(source: DataSource, state: string): Promise<UCCFiling[]> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     }
@@ -220,10 +230,7 @@ export class DataIngestionService {
   /**
    * Query UCC filings from database
    */
-  private async queryDatabase(
-    source: DataSource,
-    state: string
-  ): Promise<UCCFiling[]> {
+  private async queryDatabase(source: DataSource, state: string): Promise<UCCFiling[]> {
     // Placeholder for database query implementation
     // Would use a database client (e.g., Prisma, TypeORM) to query UCC filing data
     console.log(`Querying database for ${state} filings`)
@@ -234,20 +241,25 @@ export class DataIngestionService {
   /**
    * Transform API response to UCCFiling format
    */
-  private transformAPIResponse(data: any, state: string): UCCFiling[] {
+  private transformAPIResponse(data: unknown, state: string): UCCFiling[] {
     // Transform external API response to our UCCFiling type
     if (!Array.isArray(data)) {
       return []
     }
 
-    return data.map((item: any) => ({
+    return (data as RawUCCFilingData[]).map((item) => ({
       id: item.id || `ucc-${Date.now()}-${Math.random()}`,
       filingDate: item.filing_date || item.filingDate || new Date().toISOString().split('T')[0],
       debtorName: item.debtor_name || item.debtorName || '',
       securedParty: item.secured_party || item.securedParty || '',
       state: state,
       lienAmount: item.lien_amount || item.lienAmount,
-      status: item.status === 'active' ? 'active' : item.status === 'terminated' ? 'terminated' : 'lapsed',
+      status:
+        item.status === 'active'
+          ? 'active'
+          : item.status === 'terminated'
+            ? 'terminated'
+            : 'lapsed',
       filingType: item.filing_type === 'UCC-3' ? 'UCC-3' : 'UCC-1'
     }))
   }
@@ -266,7 +278,7 @@ export class DataIngestionService {
     const timestamps = this.requestCounts.get(source.id)!
 
     // Remove timestamps outside the window
-    const recentTimestamps = timestamps.filter(ts => now - ts < windowMs)
+    const recentTimestamps = timestamps.filter((ts) => now - ts < windowMs)
 
     if (recentTimestamps.length >= source.rateLimit) {
       // Calculate delay needed
@@ -286,7 +298,7 @@ export class DataIngestionService {
    * Utility delay function
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   /**
@@ -296,11 +308,11 @@ export class DataIngestionService {
     minDaysLapsed: number = 1095 // 3 years default
   ): Promise<UCCFiling[]> {
     const results = await this.ingestData()
-    const allFilings = results.flatMap(r => r.filings)
+    const allFilings = results.flatMap((r) => r.filings)
 
     const now = new Date()
 
-    return allFilings.filter(filing => {
+    return allFilings.filter((filing) => {
       if (filing.status !== 'lapsed') return false
 
       const filingDate = new Date(filing.filingDate)
@@ -320,11 +332,12 @@ export class DataIngestionService {
     errorCount: number
   } {
     const totalRecords = results.reduce((sum, r) => sum + r.metadata.recordCount, 0)
-    const successCount = results.filter(r => r.success).length
+    const successCount = results.filter((r) => r.success).length
     const successRate = results.length > 0 ? (successCount / results.length) * 100 : 0
-    const avgProcessingTime = results.length > 0
-      ? results.reduce((sum, r) => sum + r.metadata.processingTime, 0) / results.length
-      : 0
+    const avgProcessingTime =
+      results.length > 0
+        ? results.reduce((sum, r) => sum + r.metadata.processingTime, 0) / results.length
+        : 0
     const errorCount = results.reduce((sum, r) => sum + r.errors.length, 0)
 
     return {
