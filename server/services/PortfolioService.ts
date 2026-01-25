@@ -1,34 +1,97 @@
+/**
+ * PortfolioService
+ *
+ * Service layer for managing funded portfolio companies in the UCC-MCA Intelligence Platform.
+ * Tracks health scores, funding history, and performance metrics for companies that have
+ * received merchant cash advances.
+ *
+ * @module server/services/PortfolioService
+ */
+
 import { database } from '../database/connection'
 
+/**
+ * Portfolio company entity representing a funded merchant.
+ */
 interface PortfolioCompany {
+  /** Unique identifier */
   id: string
+  /** Company name */
   company_name: string
+  /** Date the company was funded */
   funded_date: string
+  /** Amount funded */
   funded_amount: number
+  /** Current health score (0-100) */
   current_health_score: number
+  /** Health grade (A-F) */
   health_grade: string
+  /** Health trend direction */
   health_trend: string
+  /** State where company is located */
   state: string
+  /** Industry classification */
   industry: string
+  /** Days since the company was funded */
   days_since_funding: number
 }
 
+/**
+ * Parameters for listing portfolio companies with filtering and pagination.
+ */
 interface ListParams {
+  /** Page number (1-indexed) */
   page: number
+  /** Number of items per page */
   limit: number
+  /** Filter by health grade (A, B, C, D, F) */
   health_grade?: string
+  /** Column to sort by */
   sort_by: string
+  /** Sort direction */
   sort_order: 'asc' | 'desc'
 }
 
+/**
+ * Service for managing funded portfolio companies.
+ *
+ * Provides methods for:
+ * - Listing portfolio companies with filtering
+ * - Retrieving individual company details
+ * - Tracking health score history
+ * - Aggregate portfolio statistics
+ *
+ * @example
+ * ```typescript
+ * const service = new PortfolioService()
+ *
+ * // List companies with health grade filter
+ * const result = await service.list({
+ *   page: 1,
+ *   limit: 20,
+ *   health_grade: 'A',
+ *   sort_by: 'current_health_score',
+ *   sort_order: 'desc'
+ * })
+ *
+ * // Get health history for a company
+ * const history = await service.getHealthHistory('company-id')
+ * ```
+ */
 export class PortfolioService {
+  /**
+   * List portfolio companies with filtering, sorting, and pagination.
+   *
+   * @param params - Query parameters for filtering and pagination
+   * @returns Paginated list of portfolio companies with total count
+   */
   async list(params: ListParams) {
     const { page, limit, health_grade, sort_by, sort_order } = params
     const offset = (page - 1) * limit
 
     // Build WHERE clause
     const conditions: string[] = []
-    const values: any[] = []
+    const values: (string | number)[] = []
     let paramCount = 1
 
     if (health_grade) {
@@ -73,6 +136,12 @@ export class PortfolioService {
     }
   }
 
+  /**
+   * Get a portfolio company by ID with full details.
+   *
+   * @param id - The company's unique identifier
+   * @returns The portfolio company if found, null otherwise
+   */
   async getById(id: string) {
     const query = `
       SELECT
@@ -99,6 +168,15 @@ export class PortfolioService {
     return results[0] || null
   }
 
+  /**
+   * Get health score history for a portfolio company.
+   *
+   * Returns the last 30 health score records, ordered by most recent first.
+   * Useful for tracking health trends over time.
+   *
+   * @param id - The company's unique identifier
+   * @returns Array of health score records
+   */
   async getHealthHistory(id: string) {
     const query = `
       SELECT
@@ -118,6 +196,17 @@ export class PortfolioService {
     return results
   }
 
+  /**
+   * Get aggregate statistics for the entire portfolio.
+   *
+   * Calculates:
+   * - Total companies and funding amount
+   * - Average health score
+   * - Distribution by health grade (A-F)
+   * - Distribution by health trend
+   *
+   * @returns Portfolio-wide statistics
+   */
   async getStats() {
     const query = `
       SELECT
@@ -136,18 +225,20 @@ export class PortfolioService {
     `
 
     const results = await database.query(query)
-    return results[0] || {
-      total_companies: 0,
-      total_funded: 0,
-      avg_health_score: 0,
-      grade_a_count: 0,
-      grade_b_count: 0,
-      grade_c_count: 0,
-      grade_d_count: 0,
-      grade_f_count: 0,
-      improving_count: 0,
-      stable_count: 0,
-      declining_count: 0
-    }
+    return (
+      results[0] || {
+        total_companies: 0,
+        total_funded: 0,
+        avg_health_score: 0,
+        grade_a_count: 0,
+        grade_b_count: 0,
+        grade_c_count: 0,
+        grade_d_count: 0,
+        grade_f_count: 0,
+        improving_count: 0,
+        stable_count: 0,
+        declining_count: 0
+      }
+    )
   }
 }

@@ -1,37 +1,100 @@
+/**
+ * EnrichmentService
+ *
+ * Service layer for data enrichment in the UCC-MCA Intelligence Platform.
+ * Enriches prospect data with growth signals, health scores, revenue estimates,
+ * and industry classifications from external data sources.
+ *
+ * Note: Current implementation uses mock data. In production, this will integrate
+ * with external APIs for real data enrichment.
+ *
+ * @module server/services/EnrichmentService
+ */
+
 import { database } from '../database/connection'
 
+/**
+ * Result of enriching a prospect with additional data.
+ */
 interface EnrichmentResult {
+  /** Detected growth signals by type */
   growth_signals: {
+    /** Number of hiring signals detected */
     hiring: number
+    /** Number of permit applications detected */
     permits: number
+    /** Number of new contracts detected */
     contracts: number
+    /** Number of expansion signals detected */
     expansion: number
+    /** Number of equipment purchase signals detected */
     equipment: number
   }
+  /** Calculated health score */
   health_score: {
+    /** Numeric score (0-100) */
     score: number
+    /** Letter grade (A-F) */
     grade: string
+    /** Trend direction (improving, stable, declining) */
     trend: string
+    /** Number of violations found */
     violations: number
   }
+  /** Estimated annual revenue */
   estimated_revenue: number
+  /** Industry classification */
   industry_classification: string
+  /** Data sources used for enrichment */
   data_sources_used: string[]
 }
 
+/**
+ * Service for enriching prospect data with external signals.
+ *
+ * Provides methods for:
+ * - Single prospect enrichment
+ * - Batch enrichment
+ * - Triggering refresh of stale data
+ * - Enrichment status monitoring
+ *
+ * @example
+ * ```typescript
+ * const service = new EnrichmentService()
+ *
+ * // Enrich a single prospect
+ * const result = await service.enrichProspect('prospect-id')
+ *
+ * // Batch enrich multiple prospects
+ * const results = await service.enrichBatch(['id1', 'id2', 'id3'])
+ *
+ * // Trigger refresh of stale data
+ * const refreshResult = await service.triggerRefresh()
+ * ```
+ */
 export class EnrichmentService {
+  /**
+   * Enrich a single prospect with growth signals and health data.
+   *
+   * This method:
+   * 1. Fetches the prospect from the database
+   * 2. Gathers enrichment data (currently mocked)
+   * 3. Updates the prospect with enrichment metadata
+   * 4. Stores growth signals and health scores
+   *
+   * @param prospectId - The prospect's unique identifier
+   * @returns Enrichment result with all gathered data
+   * @throws {Error} If the prospect is not found
+   */
   async enrichProspect(prospectId: string): Promise<EnrichmentResult> {
     // Get prospect details
-    const prospect = await database.query(
-      'SELECT * FROM prospects WHERE id = $1',
-      [prospectId]
-    )
+    const prospect = await database.query('SELECT * FROM prospects WHERE id = $1', [prospectId])
 
     if (prospect.length === 0) {
       throw new Error(`Prospect ${prospectId} not found`)
     }
 
-    const prospectData = prospect[0]
+    const prospectData = prospect[0] as { lien_amount?: number; industry?: string }
 
     // Simulate enrichment process
     // In Phase 2, this will call actual external APIs
@@ -49,8 +112,10 @@ export class EnrichmentService {
         trend: ['improving', 'stable', 'declining'][Math.floor(Math.random() * 3)],
         violations: Math.floor(Math.random() * 3)
       },
-      estimated_revenue: prospectData.lien_amount ? prospectData.lien_amount * (4 + Math.random() * 2) : 0,
-      industry_classification: prospectData.industry,
+      estimated_revenue: prospectData.lien_amount
+        ? prospectData.lien_amount * (4 + Math.random() * 2)
+        : 0,
+      industry_classification: prospectData.industry || 'unknown',
       data_sources_used: ['mock-data']
     }
 
@@ -94,7 +159,18 @@ export class EnrichmentService {
     return enrichment
   }
 
-  async enrichBatch(prospectIds: string[]): Promise<Array<{ prospect_id: string; success: boolean; error?: string }>> {
+  /**
+   * Enrich multiple prospects in a batch operation.
+   *
+   * Processes each prospect individually, collecting successes and failures.
+   * Errors for individual prospects don't stop the batch.
+   *
+   * @param prospectIds - Array of prospect IDs to enrich
+   * @returns Array of results indicating success/failure for each prospect
+   */
+  async enrichBatch(
+    prospectIds: string[]
+  ): Promise<Array<{ prospect_id: string; success: boolean; error?: string }>> {
     const results = []
 
     for (const prospectId of prospectIds) {
@@ -113,6 +189,18 @@ export class EnrichmentService {
     return results
   }
 
+  /**
+   * Trigger a refresh of stale or unenriched prospect data.
+   *
+   * By default, refreshes prospects that:
+   * - Have never been enriched
+   * - Were last enriched more than 7 days ago
+   *
+   * Limited to 100 prospects per call for performance.
+   *
+   * @param force - If true, refresh all prospects regardless of staleness
+   * @returns Summary of refresh operation results
+   */
   async triggerRefresh(force: boolean = false) {
     // Get prospects that need refreshing
     const query = force
@@ -124,16 +212,21 @@ export class EnrichmentService {
 
     const prospects = await database.query<{ id: string }>(query)
 
-    const prospectIds = prospects.map(p => p.id)
+    const prospectIds = prospects.map((p) => p.id)
     const results = await this.enrichBatch(prospectIds)
 
     return {
       queued: prospectIds.length,
-      successful: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length
+      successful: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length
     }
   }
 
+  /**
+   * Get the current status of enrichment across all prospects.
+   *
+   * @returns Statistics about enrichment coverage and quality
+   */
   async getStatus() {
     const stats = await database.query(`
       SELECT
@@ -145,15 +238,24 @@ export class EnrichmentService {
       FROM prospects
     `)
 
-    return stats[0] || {
-      total_prospects: 0,
-      enriched_count: 0,
-      unenriched_count: 0,
-      stale_count: 0,
-      avg_confidence: 0
-    }
+    return (
+      stats[0] || {
+        total_prospects: 0,
+        enriched_count: 0,
+        unenriched_count: 0,
+        stale_count: 0,
+        avg_confidence: 0
+      }
+    )
   }
 
+  /**
+   * Get the current status of the enrichment job queue.
+   *
+   * Note: In Phase 3, this will integrate with BullMQ for real queue status.
+   *
+   * @returns Queue statistics (currently mocked)
+   */
   async getQueueStatus() {
     // In Phase 3, this will integrate with BullMQ
     // For now, return mock queue status
@@ -166,6 +268,12 @@ export class EnrichmentService {
     }
   }
 
+  /**
+   * Calculate letter grade from numeric score.
+   *
+   * @param score - Numeric score (0-100)
+   * @returns Letter grade (A, B, C, D, or F)
+   */
   private calculateGrade(score: number): string {
     if (score >= 90) return 'A'
     if (score >= 80) return 'B'
