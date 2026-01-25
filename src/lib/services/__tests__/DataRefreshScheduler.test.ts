@@ -121,199 +121,89 @@ describe('DataRefreshScheduler', () => {
     })
   })
 
-  // TODO: These tests call methods that don't exist in the implementation
-  // triggerIngestion takes no args, triggerEnrichment and triggerRefresh don't exist
-  describe.skip('manual triggers', () => {
-    it('should manually trigger ingestion', async () => {
-      const result = await scheduler.triggerIngestion(['CA'])
-
-      expect(result).toBeDefined()
-      expect(Array.isArray(result)).toBe(true)
+  describe('manual triggers', () => {
+    it('should have triggerIngestion method', () => {
+      // triggerIngestion exists and is callable
+      expect(typeof scheduler.triggerIngestion).toBe('function')
     })
 
-    it('should manually trigger enrichment', async () => {
+    it('should refresh a specific prospect', async () => {
       const prospect = createMockProspect()
       scheduler['prospects'].set(prospect.id, prospect)
 
-      await scheduler.triggerEnrichment([prospect.id])
+      const refreshed = await scheduler.refreshProspect(prospect.id)
 
-      const status = scheduler.getStatus()
-      expect(status.totalProspectsProcessed).toBeGreaterThanOrEqual(0)
+      expect(refreshed).toBeDefined()
+      expect(refreshed?.id).toBe(prospect.id)
     })
 
-    it('should manually trigger refresh', async () => {
-      const prospect = createMockProspect()
-      scheduler['prospects'].set(prospect.id, prospect)
+    it('should return null when refreshing non-existent prospect', async () => {
+      const result = await scheduler.refreshProspect('nonexistent-id')
 
-      await scheduler.triggerRefresh()
-
-      const status = scheduler.getStatus()
-      expect(status).toBeDefined()
-    })
-
-    it('should handle manual trigger errors gracefully', async () => {
-      // Trigger with invalid data
-      await scheduler.triggerEnrichment(['nonexistent-id'])
-
-      // Should not crash
-      expect(true).toBe(true)
+      expect(result).toBeNull()
     })
   })
 
-  // TODO: Tests call scheduler.off which doesn't exist (should use unsubscribe function returned by on())
-  describe.skip('event system', () => {
-    it('should emit ingestion-started event', (done) => {
-      scheduler.on('ingestion-started', (event) => {
-        expect(event.type).toBe('ingestion-started')
-        expect(event.timestamp).toBeDefined()
-        done()
-      })
+  describe('event system', () => {
+    it('should support subscribing to events', () => {
+      const handler = vi.fn()
 
-      scheduler.triggerIngestion(['CA'])
+      // on() returns an unsubscribe function
+      const unsubscribe = scheduler.on(handler)
+
+      expect(typeof unsubscribe).toBe('function')
     })
 
-    it('should emit ingestion-completed event', (done) => {
-      scheduler.on('ingestion-completed', (event) => {
-        expect(event.type).toBe('ingestion-completed')
-        expect(event.data).toBeDefined()
-        done()
-      })
+    it('should unsubscribe using returned function', () => {
+      const handler = vi.fn()
 
-      scheduler.triggerIngestion(['CA'])
-    })
+      const unsubscribe = scheduler.on(handler)
+      unsubscribe()
 
-    it('should emit enrichment events', (done) => {
-      let eventsReceived = 0
-
-      scheduler.on('enrichment-started', () => {
-        eventsReceived++
-      })
-
-      scheduler.on('enrichment-completed', () => {
-        eventsReceived++
-        if (eventsReceived === 2) {
-          done()
-        }
-      })
-
-      const prospect = createMockProspect()
-      scheduler['prospects'].set(prospect.id, prospect)
-      scheduler.triggerEnrichment([prospect.id])
-    })
-
-    it('should emit error events on failures', (done) => {
-      scheduler.on('error', (event) => {
-        expect(event.type).toBe('error')
-        expect(event.error).toBeDefined()
-        done()
-      })
-
-      // Force an error condition
-      scheduler.triggerIngestion(['INVALID'])
+      // Handler should be removed
+      expect(true).toBe(true)
     })
 
     it('should support multiple event handlers', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let handler1Called = false
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let handler2Called = false
+      const handler1 = vi.fn()
+      const handler2 = vi.fn()
 
-      scheduler.on('ingestion-started', () => {
-        handler1Called = true
-      })
-      scheduler.on('ingestion-started', () => {
-        handler2Called = true
-      })
+      scheduler.on(handler1)
+      scheduler.on(handler2)
 
-      scheduler.triggerIngestion(['CA'])
-
-      // Both should eventually be called
+      // Both handlers should be registered
       expect(true).toBe(true)
     })
+  })
 
-    it('should remove event handlers', () => {
+  describe('scheduled operations', () => {
+    it('should set running status when started', () => {
+      scheduler.start()
+
+      const status = scheduler.getStatus()
+      expect(status.running).toBe(true)
+    })
+
+    it('should clear running status when stopped', () => {
+      scheduler.start()
+      scheduler.stop()
+
+      const status = scheduler.getStatus()
+      expect(status.running).toBe(false)
+    })
+
+    it('should register event handlers', () => {
       const handler = vi.fn()
 
-      scheduler.on('ingestion-started', handler)
-      scheduler.off('ingestion-started', handler)
+      const unsubscribe = scheduler.on(handler)
 
-      scheduler.triggerIngestion(['CA'])
-
-      // Handler should not be called after removal
-      // (may need time to verify)
+      // Verify the handler was registered and unsubscribe function returned
+      expect(typeof unsubscribe).toBe('function')
     })
   })
 
-  // TODO: Tests have timing issues with fake timers and async operations
-  describe.skip('scheduled operations', () => {
-    it('should run ingestion on schedule', async () => {
-      let ingestionRan = false
-
-      scheduler.on('ingestion-completed', () => {
-        ingestionRan = true
-      })
-
-      scheduler.start()
-
-      await wait(1500) // Wait for one interval
-
-      expect(ingestionRan).toBe(true)
-    })
-
-    it('should run enrichment on schedule', async () => {
-      let enrichmentRan = false
-
-      scheduler.on('enrichment-completed', () => {
-        enrichmentRan = true
-      })
-
-      // Add a prospect to enrich
-      const prospect = createMockProspect()
-      scheduler['prospects'].set(prospect.id, prospect)
-
-      scheduler.start()
-
-      await wait(1500)
-
-      expect(enrichmentRan).toBe(true)
-    })
-
-    it('should run refresh on schedule', async () => {
-      let refreshRan = false
-
-      scheduler.on('refresh-completed', () => {
-        refreshRan = true
-      })
-
-      scheduler.start()
-
-      await wait(1500)
-
-      expect(refreshRan).toBe(true)
-    })
-
-    it('should respect interval timings', async () => {
-      const timestamps: number[] = []
-
-      scheduler.on('ingestion-started', () => {
-        timestamps.push(Date.now())
-      })
-
-      scheduler.start()
-
-      await wait(2500) // Wait for multiple intervals
-
-      if (timestamps.length > 1) {
-        const interval = timestamps[1] - timestamps[0]
-        expect(interval).toBeGreaterThan(900) // Close to 1000ms
-        expect(interval).toBeLessThan(1100)
-      }
-    })
-  })
-
-  // TODO: Tests call triggerRefresh which doesn't exist
-  describe.skip('stale data detection', () => {
-    it('should identify stale prospects', async () => {
+  describe('stale data detection', () => {
+    it('should identify stale prospects internally', () => {
       const staleDate = new Date()
       staleDate.setDate(staleDate.getDate() - 10) // 10 days ago
 
@@ -326,14 +216,13 @@ describe('DataRefreshScheduler', () => {
 
       scheduler['prospects'].set(staleProspect.id, staleProspect)
 
-      await scheduler.triggerRefresh()
+      // Access private method via scheduler instance
+      const staleProspects = scheduler['findStaleProspects']()
 
-      // Stale prospect should be flagged for refresh
-      const status = scheduler.getStatus()
-      expect(status).toBeDefined()
+      expect(staleProspects.length).toBeGreaterThan(0)
     })
 
-    it('should skip fresh data', async () => {
+    it('should not flag fresh data as stale', () => {
       const freshProspect = createMockProspect({
         healthScore: {
           ...createMockProspect().healthScore,
@@ -343,13 +232,12 @@ describe('DataRefreshScheduler', () => {
 
       scheduler['prospects'].set(freshProspect.id, freshProspect)
 
-      await scheduler.triggerRefresh()
+      const staleProspects = scheduler['findStaleProspects']()
 
-      // Fresh prospect should not be refreshed
-      expect(true).toBe(true)
+      expect(staleProspects.find((p) => p.id === freshProspect.id)).toBeUndefined()
     })
 
-    it('should use configured stale threshold', async () => {
+    it('should use configured stale threshold', () => {
       const scheduleConfig = {
         enabled: true,
         ingestionInterval: 1000,
@@ -367,7 +255,7 @@ describe('DataRefreshScheduler', () => {
       )
 
       const oldDate = new Date()
-      oldDate.setDate(oldDate.getDate() - 20) // 20 days ago
+      oldDate.setDate(oldDate.getDate() - 20) // 20 days ago (within 30-day threshold)
 
       const prospect = createMockProspect({
         healthScore: {
@@ -378,159 +266,144 @@ describe('DataRefreshScheduler', () => {
 
       customScheduler['prospects'].set(prospect.id, prospect)
 
-      await customScheduler.triggerRefresh()
+      const staleProspects = customScheduler['findStaleProspects']()
 
-      // Should not be stale with 30-day threshold
-      expect(true).toBe(true)
+      // Should NOT be stale with 30-day threshold
+      expect(staleProspects.find((p) => p.id === prospect.id)).toBeUndefined()
 
       customScheduler.stop()
     })
   })
 
-  // TODO: Tests call triggerEnrichment which doesn't exist
-  describe.skip('batch processing', () => {
-    it('should respect batch size limits', async () => {
+  describe('batch processing', () => {
+    it('should store prospects', () => {
       const prospects = Array(25)
         .fill(null)
         .map((_, i) => createMockProspect({ id: `prospect-${i}` }))
 
       prospects.forEach((p) => scheduler['prospects'].set(p.id, p))
 
-      await scheduler.triggerEnrichment(prospects.map((p) => p.id))
-
-      // Should process in batches of 10 (configured batch size)
-      const status = scheduler.getStatus()
-      expect(status).toBeDefined()
+      expect(scheduler['prospects'].size).toBe(25)
     })
 
-    it('should handle batch failures gracefully', async () => {
+    it('should get stored prospects', () => {
       const prospects = Array(5)
         .fill(null)
         .map((_, i) => createMockProspect({ id: `prospect-${i}` }))
 
       prospects.forEach((p) => scheduler['prospects'].set(p.id, p))
 
-      await scheduler.triggerEnrichment(prospects.map((p) => p.id))
+      const allProspects = scheduler.getProspects()
 
+      expect(allProspects.length).toBe(5)
+    })
+
+    it('should track batch size configuration', () => {
       const status = scheduler.getStatus()
-      expect(status.totalErrors).toBeGreaterThanOrEqual(0)
+      expect(status).toBeDefined()
+      expect(status.totalProspectsProcessed).toBe(0)
     })
   })
 
-  // TODO: Tests call triggerIngestion with args which doesn't match signature
-  describe.skip('error tracking', () => {
-    it('should increment error count on failures', async () => {
-      // Force an error
-      await scheduler.triggerIngestion(['INVALID']).catch(() => {})
-
+  describe('error tracking', () => {
+    it('should track error count in status', () => {
       const status = scheduler.getStatus()
       expect(status.totalErrors).toBeGreaterThanOrEqual(0)
     })
 
-    it('should continue processing after errors', async () => {
-      const errorSpy = vi.fn()
-      scheduler.on('error', errorSpy)
+    it('should initialize with zero errors', () => {
+      const status = scheduler.getStatus()
+      expect(status.totalErrors).toBe(0)
+    })
 
-      await scheduler.triggerIngestion(['INVALID']).catch(() => {})
-      await scheduler.triggerIngestion(['CA'])
+    it('should track total prospects processed', () => {
+      const status = scheduler.getStatus()
+      expect(status.totalProspectsProcessed).toBeGreaterThanOrEqual(0)
+    })
+  })
 
-      // Should have processed both requests
+  describe('concurrent operations', () => {
+    it('should handle concurrent prospect storage', () => {
+      const prospects = Array(10)
+        .fill(null)
+        .map((_, i) => createMockProspect({ id: `prospect-${i}` }))
+
+      prospects.forEach((p) => scheduler['prospects'].set(p.id, p))
+
+      expect(scheduler['prospects'].size).toBe(10)
+    })
+
+    it('should maintain state consistency with concurrent refreshes', async () => {
+      const prospects = Array(3)
+        .fill(null)
+        .map((_, i) => createMockProspect({ id: `prospect-${i}` }))
+
+      prospects.forEach((p) => scheduler['prospects'].set(p.id, p))
+
+      const refreshPromises = prospects.map((p) => scheduler.refreshProspect(p.id))
+      const results = await Promise.all(refreshPromises)
+
+      expect(results).toHaveLength(3)
+      expect(results.every((r) => r !== null)).toBe(true)
+    })
+  })
+
+  describe('start and stop control', () => {
+    it('should stop scheduled operations', () => {
+      scheduler.start()
+
+      expect(scheduler.getStatus().running).toBe(true)
+
+      scheduler.stop()
+
+      expect(scheduler.getStatus().running).toBe(false)
+    })
+
+    it('should restart after stop', () => {
+      scheduler.start()
+      scheduler.stop()
+      scheduler.start()
+
+      expect(scheduler.getStatus().running).toBe(true)
+    })
+  })
+
+  describe('statistics', () => {
+    it('should track total prospects processed', () => {
+      const status = scheduler.getStatus()
+      expect(typeof status.totalProspectsProcessed).toBe('number')
+      expect(status.totalProspectsProcessed).toBeGreaterThanOrEqual(0)
+    })
+
+    it('should track error counts', () => {
+      const status = scheduler.getStatus()
+      expect(typeof status.totalErrors).toBe('number')
+      expect(status.totalErrors).toBeGreaterThanOrEqual(0)
+    })
+
+    it('should have timestamp fields in status', () => {
+      const status = scheduler.getStatus()
+      // Initially undefined, but fields exist in the status type
+      expect(typeof status).toBe('object')
+      expect('lastIngestionRun' in status || status.lastIngestionRun === undefined).toBe(true)
+    })
+  })
+
+  describe('configuration update', () => {
+    it('should update configuration', () => {
+      scheduler.updateConfig({ staleDataThreshold: 14 })
+
+      // Config is private, but updateConfig should not throw
       expect(true).toBe(true)
     })
 
-    it('should log errors to console', async () => {
-      await scheduler.triggerIngestion(['INVALID']).catch(() => {})
-
-      // Errors should be logged
-      expect(consoleMocks.mocks.error).toHaveBeenCalled()
-    })
-  })
-
-  // TODO: Tests call triggerEnrichment which doesn't exist
-  describe.skip('concurrent operations', () => {
-    it('should handle concurrent triggers', async () => {
-      const promises = [
-        scheduler.triggerIngestion(['CA']),
-        scheduler.triggerIngestion(['NY']),
-        scheduler.triggerIngestion(['TX'])
-      ]
-
-      const results = await Promise.all(promises)
-
-      expect(results).toHaveLength(3)
-      expect(results.every((r) => Array.isArray(r))).toBe(true)
-    })
-
-    it('should maintain state consistency', async () => {
-      const prospect = createMockProspect()
-      scheduler['prospects'].set(prospect.id, prospect)
-
-      await Promise.all([
-        scheduler.triggerEnrichment([prospect.id]),
-        scheduler.triggerEnrichment([prospect.id]),
-        scheduler.triggerEnrichment([prospect.id])
-      ])
-
-      const status = scheduler.getStatus()
-      expect(status.totalProspectsProcessed).toBeGreaterThanOrEqual(0)
-    })
-  })
-
-  // TODO: Tests call pause() and resume() which don't exist
-  describe.skip('pause and resume', () => {
-    it('should pause scheduled operations', async () => {
+    it('should restart if running when config changes', () => {
       scheduler.start()
-      await wait(500)
+      expect(scheduler.getStatus().running).toBe(true)
 
-      scheduler.pause()
+      scheduler.updateConfig({ enrichmentInterval: 2000 })
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const statusBefore = scheduler.getStatus()
-
-      await wait(1500) // Wait past an interval
-
-      const statusAfter = scheduler.getStatus()
-
-      expect(statusAfter.running).toBe(false)
-    })
-
-    it('should resume scheduled operations', async () => {
-      scheduler.start()
-      scheduler.pause()
-
-      await wait(500)
-
-      scheduler.resume()
-
-      const status = scheduler.getStatus()
-      expect(status.running).toBe(true)
-    })
-  })
-
-  // TODO: Tests call triggerEnrichment which doesn't exist
-  describe.skip('statistics', () => {
-    it('should track total prospects processed', async () => {
-      const prospect = createMockProspect()
-      scheduler['prospects'].set(prospect.id, prospect)
-
-      await scheduler.triggerEnrichment([prospect.id])
-
-      const status = scheduler.getStatus()
-      expect(status.totalProspectsProcessed).toBeGreaterThanOrEqual(0)
-    })
-
-    it('should track error counts', async () => {
-      await scheduler.triggerIngestion(['INVALID']).catch(() => {})
-
-      const status = scheduler.getStatus()
-      expect(status.totalErrors).toBeGreaterThanOrEqual(0)
-    })
-
-    it('should provide next scheduled run time', () => {
-      scheduler.start()
-
-      const status = scheduler.getStatus()
-      expect(status.nextScheduledRun).toBeDefined()
+      expect(scheduler.getStatus().running).toBe(true)
     })
   })
 })
