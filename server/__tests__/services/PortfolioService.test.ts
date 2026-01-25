@@ -1,20 +1,55 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { PortfolioService } from '../../services/PortfolioService'
-import { TestDataFactory } from '../helpers/testData'
 
-// TODO: These tests require database connection - TestDataFactory needs DB
-describe.skip('PortfolioService', () => {
+// Mock the database module
+vi.mock('../../database/connection', () => ({
+  database: {
+    query: vi.fn()
+  }
+}))
+
+import { database } from '../../database/connection'
+
+const mockQuery = vi.mocked(database.query)
+
+describe('PortfolioService', () => {
   let service: PortfolioService
 
   beforeEach(() => {
+    vi.clearAllMocks()
     service = new PortfolioService()
   })
 
   describe('list', () => {
     it('should return paginated list of portfolio companies', async () => {
-      await TestDataFactory.createPortfolioCompany()
-      await TestDataFactory.createPortfolioCompany()
-      await TestDataFactory.createPortfolioCompany()
+      const mockCompanies = [
+        {
+          id: '1',
+          company_name: 'Company A',
+          funded_date: '2024-01-01',
+          funded_amount: 1000000,
+          current_health_score: 85,
+          health_grade: 'B',
+          health_trend: 'stable',
+          state: 'CA',
+          industry: 'Technology',
+          days_since_funding: 180
+        },
+        {
+          id: '2',
+          company_name: 'Company B',
+          funded_date: '2024-02-01',
+          funded_amount: 2000000,
+          current_health_score: 92,
+          health_grade: 'A',
+          health_trend: 'improving',
+          state: 'NY',
+          industry: 'Manufacturing',
+          days_since_funding: 150
+        }
+      ]
+
+      mockQuery.mockResolvedValueOnce(mockCompanies).mockResolvedValueOnce([{ count: '2' }])
 
       const result = await service.list({
         page: 1,
@@ -25,17 +60,19 @@ describe.skip('PortfolioService', () => {
 
       expect(result).toBeDefined()
       expect(result.companies).toBeInstanceOf(Array)
-      expect(result.companies.length).toBe(3)
+      expect(result.companies.length).toBe(2)
       expect(result.page).toBe(1)
       expect(result.limit).toBe(10)
-      expect(result.total).toBe(3)
+      expect(result.total).toBe(2)
     })
 
     it('should filter by health grade', async () => {
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'A' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'A' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'B' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'C' })
+      const mockCompanies = [
+        { id: '1', company_name: 'Company A', health_grade: 'A' },
+        { id: '2', company_name: 'Company B', health_grade: 'A' }
+      ]
+
+      mockQuery.mockResolvedValueOnce(mockCompanies).mockResolvedValueOnce([{ count: '2' }])
 
       const result = await service.list({
         page: 1,
@@ -46,16 +83,22 @@ describe.skip('PortfolioService', () => {
       })
 
       expect(result.companies.length).toBe(2)
-      result.companies.forEach((c) => {
-        expect(c.health_grade).toBe('A')
-      })
+
+      // Verify health grade filter was applied
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('WHERE')
+      expect(queryCall[0]).toContain('health_grade = $1')
+      expect(queryCall[1]).toContain('A')
     })
 
     it('should handle pagination correctly', async () => {
-      // Create 25 companies
-      for (let i = 0; i < 25; i++) {
-        await TestDataFactory.createPortfolioCompany()
-      }
+      const page1Companies = Array.from({ length: 10 }, (_, i) => ({
+        id: `${i + 1}`,
+        company_name: `Company ${i + 1}`,
+        days_since_funding: 100 + i
+      }))
+
+      mockQuery.mockResolvedValueOnce(page1Companies).mockResolvedValueOnce([{ count: '25' }])
 
       const page1 = await service.list({
         page: 1,
@@ -66,32 +109,17 @@ describe.skip('PortfolioService', () => {
 
       expect(page1.companies.length).toBe(10)
       expect(page1.total).toBe(25)
-
-      const page3 = await service.list({
-        page: 3,
-        limit: 10,
-        sort_by: 'funded_date',
-        sort_order: 'desc'
-      })
-
-      expect(page3.companies.length).toBe(5)
     })
 
     it('should sort by different fields', async () => {
-      await TestDataFactory.createPortfolioCompany({
-        companyName: 'Alpha Corp',
-        healthScore: 95
-      })
-      await TestDataFactory.createPortfolioCompany({
-        companyName: 'Beta Inc',
-        healthScore: 75
-      })
-      await TestDataFactory.createPortfolioCompany({
-        companyName: 'Gamma LLC',
-        healthScore: 85
-      })
+      const mockCompanies = [
+        { id: '1', company_name: 'Alpha Corp', current_health_score: 95 },
+        { id: '2', company_name: 'Gamma LLC', current_health_score: 85 },
+        { id: '3', company_name: 'Beta Inc', current_health_score: 75 }
+      ]
 
-      // Sort by health score descending
+      mockQuery.mockResolvedValueOnce(mockCompanies).mockResolvedValueOnce([{ count: '3' }])
+
       const result = await service.list({
         page: 1,
         limit: 10,
@@ -100,13 +128,22 @@ describe.skip('PortfolioService', () => {
       })
 
       expect(result.companies[0].company_name).toBe('Alpha Corp')
-      expect(result.companies[1].company_name).toBe('Gamma LLC')
-      expect(result.companies[2].company_name).toBe('Beta Inc')
+
+      // Verify sort column
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('ORDER BY current_health_score DESC')
     })
 
     it('should include days since funding', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const company = await TestDataFactory.createPortfolioCompany()
+      const mockCompanies = [
+        {
+          id: '1',
+          company_name: 'Company A',
+          days_since_funding: 180
+        }
+      ]
+
+      mockQuery.mockResolvedValueOnce(mockCompanies).mockResolvedValueOnce([{ count: '1' }])
 
       const result = await service.list({
         page: 1,
@@ -123,31 +160,60 @@ describe.skip('PortfolioService', () => {
 
   describe('getById', () => {
     it('should return company by id', async () => {
-      const company = await TestDataFactory.createPortfolioCompany({
-        companyName: 'Test Company',
-        fundedAmount: 1500000,
-        healthScore: 88
-      })
+      const mockCompany = {
+        id: 'test-id',
+        company_name: 'Test Company',
+        funded_date: '2024-01-01',
+        funded_amount: 1500000,
+        current_health_score: 88,
+        health_grade: 'B',
+        health_trend: 'stable',
+        state: 'CA',
+        industry: 'Technology',
+        days_since_funding: 200
+      }
 
-      const result = await service.getById(company.id)
+      mockQuery.mockResolvedValueOnce([mockCompany])
+
+      const result = await service.getById('test-id')
 
       expect(result).toBeDefined()
-      expect(result?.id).toBe(company.id)
+      expect(result?.id).toBe('test-id')
       expect(result?.company_name).toBe('Test Company')
       expect(result?.funded_amount).toBe(1500000)
       expect(result?.current_health_score).toBe(88)
     })
 
     it('should return null for non-existent id', async () => {
+      mockQuery.mockResolvedValueOnce([])
+
       const result = await service.getById('00000000-0000-0000-0000-000000000000')
 
       expect(result).toBeNull()
     })
 
     it('should include all company details', async () => {
-      const company = await TestDataFactory.createPortfolioCompany()
+      const mockCompany = {
+        id: 'test-id',
+        company_name: 'Test Company',
+        funded_date: '2024-01-01',
+        funded_amount: 1000000,
+        current_health_score: 85,
+        health_grade: 'B',
+        health_trend: 'stable',
+        state: 'CA',
+        industry: 'Technology',
+        contact_email: 'test@example.com',
+        contact_phone: '555-0123',
+        notes: 'Test notes',
+        days_since_funding: 180,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-06-01T00:00:00Z'
+      }
 
-      const result = await service.getById(company.id)
+      mockQuery.mockResolvedValueOnce([mockCompany])
+
+      const result = await service.getById('test-id')
 
       expect(result).toBeDefined()
       expect(result).toHaveProperty('id')
@@ -165,53 +231,89 @@ describe.skip('PortfolioService', () => {
 
   describe('getHealthHistory', () => {
     it('should return health score history', async () => {
-      const company = await TestDataFactory.createPortfolioCompany()
+      const mockHistory = [
+        {
+          score: 90,
+          grade: 'A',
+          trend: 'improving',
+          violations_count: 0,
+          sentiment_score: 0.9,
+          recorded_at: '2024-06-01'
+        },
+        {
+          score: 88,
+          grade: 'B',
+          trend: 'stable',
+          violations_count: 1,
+          sentiment_score: 0.85,
+          recorded_at: '2024-05-01'
+        },
+        {
+          score: 85,
+          grade: 'B',
+          trend: 'stable',
+          violations_count: 0,
+          sentiment_score: 0.8,
+          recorded_at: '2024-04-01'
+        }
+      ]
 
-      // Create health score history
-      await TestDataFactory.createHealthScore(company.id, 85, true)
-      await TestDataFactory.createHealthScore(company.id, 88, true)
-      await TestDataFactory.createHealthScore(company.id, 90, true)
+      mockQuery.mockResolvedValueOnce(mockHistory)
 
-      const history = await service.getHealthHistory(company.id)
+      const history = await service.getHealthHistory('test-id')
 
       expect(history).toBeInstanceOf(Array)
       expect(history.length).toBe(3)
     })
 
     it('should return health scores in descending order', async () => {
-      const company = await TestDataFactory.createPortfolioCompany()
+      const mockHistory = [
+        { score: 90, recorded_at: '2024-06-01T00:00:00Z' },
+        { score: 85, recorded_at: '2024-05-01T00:00:00Z' },
+        { score: 80, recorded_at: '2024-04-01T00:00:00Z' }
+      ]
 
-      // Create scores with delays to ensure different timestamps
-      await TestDataFactory.createHealthScore(company.id, 80, true)
-      await new Promise((resolve) => setTimeout(resolve, 10))
-      await TestDataFactory.createHealthScore(company.id, 85, true)
-      await new Promise((resolve) => setTimeout(resolve, 10))
-      await TestDataFactory.createHealthScore(company.id, 90, true)
+      mockQuery.mockResolvedValueOnce(mockHistory)
 
-      const history = await service.getHealthHistory(company.id)
+      const history = await service.getHealthHistory('test-id')
 
-      // Most recent should be first
+      // Most recent should be first (already sorted by mock)
       expect(history[0].score).toBe(90)
+
+      // Verify query uses ORDER BY DESC
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('ORDER BY recorded_at DESC')
     })
 
     it('should limit to 30 most recent scores', async () => {
-      const company = await TestDataFactory.createPortfolioCompany()
+      mockQuery.mockResolvedValueOnce(
+        Array.from({ length: 30 }, (_, i) => ({ score: 80 + (i % 20) }))
+      )
 
-      // Create 40 health scores
-      for (let i = 0; i < 40; i++) {
-        await TestDataFactory.createHealthScore(company.id, 80 + (i % 20), true)
-      }
-
-      const history = await service.getHealthHistory(company.id)
+      const history = await service.getHealthHistory('test-id')
 
       expect(history.length).toBe(30)
+
+      // Verify LIMIT in query
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('LIMIT 30')
     })
 
     it('should include score details', async () => {
-      const company = await TestDataFactory.createPortfolioCompany()
-      await TestDataFactory.createHealthScore(company.id, 85, true)
+      const mockHistory = [
+        {
+          score: 85,
+          grade: 'B',
+          trend: 'stable',
+          violations_count: 1,
+          sentiment_score: 0.8,
+          recorded_at: '2024-06-01T00:00:00Z'
+        }
+      ]
 
-      const history = await service.getHealthHistory(company.id)
+      mockQuery.mockResolvedValueOnce(mockHistory)
+
+      const history = await service.getHealthHistory('test-id')
 
       expect(history[0]).toHaveProperty('score')
       expect(history[0]).toHaveProperty('grade')
@@ -222,9 +324,9 @@ describe.skip('PortfolioService', () => {
     })
 
     it('should return empty array for company with no history', async () => {
-      const company = await TestDataFactory.createPortfolioCompany()
+      mockQuery.mockResolvedValueOnce([])
 
-      const history = await service.getHealthHistory(company.id)
+      const history = await service.getHealthHistory('test-id')
 
       expect(history).toBeInstanceOf(Array)
       expect(history.length).toBe(0)
@@ -233,9 +335,21 @@ describe.skip('PortfolioService', () => {
 
   describe('getStats', () => {
     it('should return portfolio statistics', async () => {
-      await TestDataFactory.createPortfolioCompany({ fundedAmount: 1000000, healthGrade: 'A' })
-      await TestDataFactory.createPortfolioCompany({ fundedAmount: 2000000, healthGrade: 'B' })
-      await TestDataFactory.createPortfolioCompany({ fundedAmount: 1500000, healthGrade: 'A' })
+      mockQuery.mockResolvedValueOnce([
+        {
+          total_companies: 3,
+          total_funded: 4500000,
+          avg_health_score: 85,
+          grade_a_count: 2,
+          grade_b_count: 1,
+          grade_c_count: 0,
+          grade_d_count: 0,
+          grade_f_count: 0,
+          improving_count: 1,
+          stable_count: 1,
+          declining_count: 1
+        }
+      ])
 
       const stats = await service.getStats()
 
@@ -247,20 +361,43 @@ describe.skip('PortfolioService', () => {
     })
 
     it('should calculate average health score', async () => {
-      await TestDataFactory.createPortfolioCompany({ healthScore: 80 })
-      await TestDataFactory.createPortfolioCompany({ healthScore: 90 })
-      await TestDataFactory.createPortfolioCompany({ healthScore: 85 })
+      mockQuery.mockResolvedValueOnce([
+        {
+          total_companies: 3,
+          total_funded: 3000000,
+          avg_health_score: 85,
+          grade_a_count: 0,
+          grade_b_count: 0,
+          grade_c_count: 0,
+          grade_d_count: 0,
+          grade_f_count: 0,
+          improving_count: 0,
+          stable_count: 0,
+          declining_count: 0
+        }
+      ])
 
       const stats = await service.getStats()
 
-      expect(stats.avg_health_score).toBeCloseTo(85, 0)
+      expect(stats.avg_health_score).toBe(85)
     })
 
     it('should count companies by health trend', async () => {
-      await TestDataFactory.createPortfolioCompany({ healthTrend: 'improving' })
-      await TestDataFactory.createPortfolioCompany({ healthTrend: 'improving' })
-      await TestDataFactory.createPortfolioCompany({ healthTrend: 'stable' })
-      await TestDataFactory.createPortfolioCompany({ healthTrend: 'declining' })
+      mockQuery.mockResolvedValueOnce([
+        {
+          total_companies: 4,
+          total_funded: 4000000,
+          avg_health_score: 80,
+          grade_a_count: 0,
+          grade_b_count: 0,
+          grade_c_count: 0,
+          grade_d_count: 0,
+          grade_f_count: 0,
+          improving_count: 2,
+          stable_count: 1,
+          declining_count: 1
+        }
+      ])
 
       const stats = await service.getStats()
 
@@ -270,12 +407,21 @@ describe.skip('PortfolioService', () => {
     })
 
     it('should count companies by all health grades', async () => {
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'A' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'B' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'B' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'C' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'D' })
-      await TestDataFactory.createPortfolioCompany({ healthGrade: 'F' })
+      mockQuery.mockResolvedValueOnce([
+        {
+          total_companies: 6,
+          total_funded: 6000000,
+          avg_health_score: 70,
+          grade_a_count: 1,
+          grade_b_count: 2,
+          grade_c_count: 1,
+          grade_d_count: 1,
+          grade_f_count: 1,
+          improving_count: 0,
+          stable_count: 0,
+          declining_count: 0
+        }
+      ])
 
       const stats = await service.getStats()
 
@@ -287,6 +433,8 @@ describe.skip('PortfolioService', () => {
     })
 
     it('should return zero stats when no companies exist', async () => {
+      mockQuery.mockResolvedValueOnce([])
+
       const stats = await service.getStats()
 
       expect(stats.total_companies).toBe(0)

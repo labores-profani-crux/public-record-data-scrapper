@@ -1,337 +1,465 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ProspectsService } from '../../services/ProspectsService'
-import { TestDataFactory } from '../helpers/testData'
+import { NotFoundError, ValidationError, DatabaseError } from '../../errors'
 
-// TODO: These tests require database connection - TestDataFactory needs DB
-describe.skip('ProspectsService', () => {
+// Mock the database module
+vi.mock('../../database/connection', () => ({
+  database: {
+    query: vi.fn()
+  }
+}))
+
+// Import the mocked database
+import { database } from '../../database/connection'
+
+const mockQuery = vi.mocked(database.query)
+
+describe('ProspectsService', () => {
   let service: ProspectsService
 
   beforeEach(() => {
+    vi.clearAllMocks()
     service = new ProspectsService()
   })
 
   describe('list', () => {
     it('should return paginated list of prospects', async () => {
-      // Create test prospects
-      await TestDataFactory.createProspects(5, { state: 'NY' })
+      const mockProspects = [
+        { id: '1', company_name: 'Test Company 1', state: 'NY', priority_score: 80 },
+        { id: '2', company_name: 'Test Company 2', state: 'NY', priority_score: 75 },
+        { id: '3', company_name: 'Test Company 3', state: 'NY', priority_score: 70 }
+      ]
+
+      mockQuery
+        .mockResolvedValueOnce(mockProspects) // Main query
+        .mockResolvedValueOnce([{ count: '3' }]) // Count query
 
       const result = await service.list({
         page: 1,
         limit: 10,
-        sort_by: 'created_at',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
       expect(result).toBeDefined()
       expect(result.prospects).toBeInstanceOf(Array)
-      expect(result.prospects.length).toBe(5)
+      expect(result.prospects.length).toBe(3)
       expect(result.page).toBe(1)
       expect(result.limit).toBe(10)
-      expect(result.total).toBe(5)
+      expect(result.total).toBe(3)
     })
 
     it('should filter prospects by state', async () => {
-      await TestDataFactory.createProspects(3, { state: 'NY' })
-      await TestDataFactory.createProspects(2, { state: 'CA' })
+      const mockProspects = [
+        { id: '1', company_name: 'Test Company 1', state: 'NY', priority_score: 80 },
+        { id: '2', company_name: 'Test Company 2', state: 'NY', priority_score: 75 }
+      ]
+
+      mockQuery.mockResolvedValueOnce(mockProspects).mockResolvedValueOnce([{ count: '2' }])
 
       const result = await service.list({
         page: 1,
         limit: 10,
         state: 'NY',
-        sort_by: 'created_at',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
-      expect(result.prospects.length).toBe(3)
-      expect(result.total).toBe(3)
-      result.prospects.forEach((p) => {
-        expect(p.state).toBe('NY')
-      })
+      expect(result.prospects.length).toBe(2)
+      expect(result.total).toBe(2)
+
+      // Verify state filter was applied in query
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('WHERE')
+      expect(queryCall[0]).toContain('state = $1')
+      expect(queryCall[1]).toContain('NY')
     })
 
     it('should filter prospects by industry', async () => {
-      await TestDataFactory.createProspects(2, { industry: 'Technology' })
-      await TestDataFactory.createProspects(3, { industry: 'Manufacturing' })
+      const mockProspects = [
+        { id: '1', company_name: 'Tech Corp', state: 'CA', industry: 'Technology' }
+      ]
+
+      mockQuery.mockResolvedValueOnce(mockProspects).mockResolvedValueOnce([{ count: '1' }])
 
       const result = await service.list({
         page: 1,
         limit: 10,
         industry: 'Technology',
-        sort_by: 'created_at',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
-      expect(result.prospects.length).toBe(2)
-      result.prospects.forEach((p) => {
-        expect(p.industry).toBe('Technology')
-      })
+      expect(result.prospects.length).toBe(1)
+      expect(result.prospects[0].industry).toBe('Technology')
+
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('industry = $1')
     })
 
-    it('should filter prospects by risk score range', async () => {
-      await TestDataFactory.createProspect({ riskScore: 50 })
-      await TestDataFactory.createProspect({ riskScore: 75 })
-      await TestDataFactory.createProspect({ riskScore: 90 })
+    it('should filter prospects by score range', async () => {
+      const mockProspects = [{ id: '1', company_name: 'Mid Score', priority_score: 75 }]
+
+      mockQuery.mockResolvedValueOnce(mockProspects).mockResolvedValueOnce([{ count: '1' }])
 
       const result = await service.list({
         page: 1,
         limit: 10,
         min_score: 60,
         max_score: 85,
-        sort_by: 'created_at',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
       expect(result.prospects.length).toBe(1)
-      expect(result.prospects[0].risk_score).toBe(75)
+
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('priority_score >= $1')
+      expect(queryCall[0]).toContain('priority_score <= $2')
     })
 
     it('should filter prospects by status', async () => {
-      await TestDataFactory.createProspects(2, { status: 'active' })
-      await TestDataFactory.createProspects(1, { status: 'converted' })
-      await TestDataFactory.createProspects(1, { status: 'archived' })
+      const mockProspects = [{ id: '1', company_name: 'Active Corp', status: 'claimed' }]
+
+      mockQuery.mockResolvedValueOnce(mockProspects).mockResolvedValueOnce([{ count: '1' }])
 
       const result = await service.list({
         page: 1,
         limit: 10,
-        status: 'active',
-        sort_by: 'created_at',
+        status: 'claimed',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
-      expect(result.prospects.length).toBe(2)
-      result.prospects.forEach((p) => {
-        expect(p.status).toBe('active')
-      })
+      expect(result.prospects.length).toBe(1)
+
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('status = $1')
     })
 
     it('should handle pagination correctly', async () => {
-      await TestDataFactory.createProspects(25)
+      const page1Prospects = Array.from({ length: 10 }, (_, i) => ({
+        id: `${i + 1}`,
+        company_name: `Company ${i + 1}`,
+        priority_score: 90 - i
+      }))
 
-      // First page
-      const page1 = await service.list({
+      mockQuery.mockResolvedValueOnce(page1Prospects).mockResolvedValueOnce([{ count: '25' }])
+
+      const result = await service.list({
         page: 1,
         limit: 10,
-        sort_by: 'created_at',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
-      expect(page1.prospects.length).toBe(10)
-      expect(page1.total).toBe(25)
+      expect(result.prospects.length).toBe(10)
+      expect(result.total).toBe(25)
+      expect(result.page).toBe(1)
 
-      // Second page
-      const page2 = await service.list({
-        page: 2,
-        limit: 10,
-        sort_by: 'created_at',
-        sort_order: 'desc'
-      })
-
-      expect(page2.prospects.length).toBe(10)
-      expect(page2.total).toBe(25)
-
-      // Third page
-      const page3 = await service.list({
-        page: 3,
-        limit: 10,
-        sort_by: 'created_at',
-        sort_order: 'desc'
-      })
-
-      expect(page3.prospects.length).toBe(5)
-      expect(page3.total).toBe(25)
+      // Verify OFFSET for page 1
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[0]).toContain('LIMIT $1 OFFSET $2')
+      expect(queryCall[1]).toContain(10) // limit
+      expect(queryCall[1]).toContain(0) // offset for page 1
     })
 
-    it('should sort by different fields', async () => {
-      await TestDataFactory.createProspect({ companyName: 'Alpha Corp', riskScore: 50 })
-      await TestDataFactory.createProspect({ companyName: 'Beta Inc', riskScore: 80 })
-      await TestDataFactory.createProspect({ companyName: 'Gamma LLC', riskScore: 65 })
+    it('should calculate correct offset for page 2', async () => {
+      mockQuery.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: '25' }])
 
-      // Sort by risk_score descending
-      const byScore = await service.list({
-        page: 1,
+      await service.list({
+        page: 2,
         limit: 10,
-        sort_by: 'risk_score',
+        sort_by: 'priority_score',
         sort_order: 'desc'
       })
 
-      expect(byScore.prospects[0].risk_score).toBe(80)
-      expect(byScore.prospects[1].risk_score).toBe(65)
-      expect(byScore.prospects[2].risk_score).toBe(50)
+      const queryCall = mockQuery.mock.calls[0]
+      // offset for page 2 with limit 10 = (2-1) * 10 = 10
+      expect(queryCall[1]).toContain(10) // offset
+    })
 
-      // Sort by company_name ascending
-      const byName = await service.list({
+    it('should use safe default for invalid sort column', async () => {
+      mockQuery.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: '0' }])
+
+      await service.list({
         page: 1,
         limit: 10,
-        sort_by: 'company_name',
-        sort_order: 'asc'
+        sort_by: 'malicious; DROP TABLE prospects;--',
+        sort_order: 'desc'
       })
 
-      expect(byName.prospects[0].company_name).toBe('Alpha Corp')
-      expect(byName.prospects[1].company_name).toBe('Beta Inc')
-      expect(byName.prospects[2].company_name).toBe('Gamma LLC')
+      const queryCall = mockQuery.mock.calls[0]
+      // Should default to priority_score
+      expect(queryCall[0]).toContain('ORDER BY priority_score')
+      expect(queryCall[0]).not.toContain('malicious')
+    })
+
+    it('should handle database errors', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Connection failed'))
+
+      await expect(
+        service.list({
+          page: 1,
+          limit: 10,
+          sort_by: 'priority_score',
+          sort_order: 'desc'
+        })
+      ).rejects.toThrow(DatabaseError)
     })
   })
 
   describe('getById', () => {
     it('should return prospect by id', async () => {
-      const created = await TestDataFactory.createProspect({
-        companyName: 'Test Company',
-        state: 'NY'
-      })
+      const mockProspect = {
+        id: 'test-id-123',
+        company_name: 'Test Company',
+        state: 'NY',
+        priority_score: 85
+      }
 
-      const result = await service.getById(created.id)
+      mockQuery.mockResolvedValueOnce([mockProspect])
+
+      const result = await service.getById('test-id-123')
 
       expect(result).toBeDefined()
-      expect(result?.id).toBe(created.id)
+      expect(result?.id).toBe('test-id-123')
       expect(result?.company_name).toBe('Test Company')
       expect(result?.state).toBe('NY')
     })
 
     it('should return null for non-existent id', async () => {
+      mockQuery.mockResolvedValueOnce([])
+
       const result = await service.getById('00000000-0000-0000-0000-000000000000')
 
       expect(result).toBeNull()
     })
 
-    it('should include growth signals count', async () => {
-      const prospect = await TestDataFactory.createProspect()
-      await TestDataFactory.createGrowthSignal(prospect.id, 'hiring', false)
-      await TestDataFactory.createGrowthSignal(prospect.id, 'permits', false)
+    it('should handle database errors', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Query failed'))
 
-      const result = await service.getById(prospect.id)
+      await expect(service.getById('test-id')).rejects.toThrow(DatabaseError)
+    })
+  })
+
+  describe('getByIdOrThrow', () => {
+    it('should return prospect when found', async () => {
+      const mockProspect = { id: 'test-id', company_name: 'Test Co' }
+      mockQuery.mockResolvedValueOnce([mockProspect])
+
+      const result = await service.getByIdOrThrow('test-id')
 
       expect(result).toBeDefined()
-      expect(result?.growth_signals_count).toBe(2)
+      expect(result.id).toBe('test-id')
+    })
+
+    it('should throw NotFoundError when prospect does not exist', async () => {
+      mockQuery.mockResolvedValueOnce([])
+
+      await expect(service.getByIdOrThrow('non-existent')).rejects.toThrow(NotFoundError)
     })
   })
 
   describe('create', () => {
     it('should create a new prospect', async () => {
-      const prospectData = {
+      const mockCreated = {
+        id: 'new-id',
         company_name: 'New Test Company',
         state: 'CA',
         industry: 'Technology',
         lien_amount: 750000,
-        risk_score: 85,
-        status: 'active' as const
+        status: 'unclaimed'
       }
 
-      const result = await service.create(prospectData)
+      mockQuery.mockResolvedValueOnce([mockCreated])
 
-      expect(result).toBeDefined()
-      expect(result.id).toBeDefined()
-      expect(result.company_name).toBe(prospectData.company_name)
-      expect(result.state).toBe(prospectData.state)
-      expect(result.industry).toBe(prospectData.industry)
-      expect(result.lien_amount).toBe(prospectData.lien_amount)
-      expect(result.risk_score).toBe(prospectData.risk_score)
-      expect(result.status).toBe(prospectData.status)
-    })
-
-    it('should set default status to active', async () => {
       const result = await service.create({
-        company_name: 'Default Status Test',
-        state: 'TX'
+        company_name: 'New Test Company',
+        state: 'CA',
+        industry: 'Technology',
+        lien_amount: 750000
       })
 
-      expect(result.status).toBe('active')
+      expect(result).toBeDefined()
+      expect(result.id).toBe('new-id')
+      expect(result.company_name).toBe('New Test Company')
+      expect(result.state).toBe('CA')
+    })
+
+    it('should throw ValidationError when company_name is missing', async () => {
+      await expect(service.create({ state: 'CA' })).rejects.toThrow(ValidationError)
+    })
+
+    it('should set default status to unclaimed', async () => {
+      const mockCreated = {
+        id: 'new-id',
+        company_name: 'Test',
+        status: 'unclaimed'
+      }
+
+      mockQuery.mockResolvedValueOnce([mockCreated])
+
+      await service.create({ company_name: 'Test' })
+
+      // Verify status was set to unclaimed in the query
+      const queryCall = mockQuery.mock.calls[0]
+      expect(queryCall[1]).toContain('unclaimed')
+    })
+
+    it('should handle database errors', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Insert failed'))
+
+      await expect(service.create({ company_name: 'Test' })).rejects.toThrow(DatabaseError)
     })
   })
 
   describe('update', () => {
     it('should update prospect fields', async () => {
-      const prospect = await TestDataFactory.createProspect({
-        companyName: 'Original Name',
-        riskScore: 70
-      })
-
-      const result = await service.update(prospect.id, {
+      const mockUpdated = {
+        id: 'test-id',
         company_name: 'Updated Name',
-        risk_score: 85
-      })
-
-      expect(result).toBeDefined()
-      expect(result?.company_name).toBe('Updated Name')
-      expect(result?.risk_score).toBe(85)
-    })
-
-    it('should return null for non-existent id', async () => {
-      const result = await service.update('00000000-0000-0000-0000-000000000000', {
-        company_name: 'Test'
-      })
-
-      expect(result).toBeNull()
-    })
-
-    it('should update only provided fields', async () => {
-      const prospect = await TestDataFactory.createProspect({
-        companyName: 'Test Company',
         state: 'NY',
-        riskScore: 75
-      })
+        priority_score: 85
+      }
 
-      const result = await service.update(prospect.id, {
-        risk_score: 90
-      })
+      mockQuery.mockResolvedValueOnce([mockUpdated])
+
+      const result = await service.update('test-id', {
+        company_name: 'Updated Name',
+        priority_score: 85
+      } as Partial<import('../../src/lib/types').Prospect>)
 
       expect(result).toBeDefined()
-      expect(result?.company_name).toBe('Test Company')
-      expect(result?.state).toBe('NY')
-      expect(result?.risk_score).toBe(90)
+      expect(result.company_name).toBe('Updated Name')
+    })
+
+    it('should throw NotFoundError for non-existent id', async () => {
+      mockQuery.mockResolvedValueOnce([])
+
+      await expect(
+        service.update('non-existent', { company_name: 'Test' } as Partial<
+          import('../../src/lib/types').Prospect
+        >)
+      ).rejects.toThrow(NotFoundError)
+    })
+
+    it('should return current prospect when no fields to update', async () => {
+      const mockProspect = { id: 'test-id', company_name: 'Test' }
+      mockQuery.mockResolvedValueOnce([mockProspect])
+
+      const result = await service.update('test-id', {})
+
+      expect(result).toBeDefined()
+      expect(result.id).toBe('test-id')
+    })
+
+    it('should handle database errors', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Update failed'))
+
+      await expect(
+        service.update('test-id', { company_name: 'Test' } as Partial<
+          import('../../src/lib/types').Prospect
+        >)
+      ).rejects.toThrow(DatabaseError)
     })
   })
 
   describe('delete', () => {
     it('should delete a prospect', async () => {
-      const prospect = await TestDataFactory.createProspect()
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 } as unknown as [])
 
-      const result = await service.delete(prospect.id)
+      const result = await service.delete('test-id')
 
       expect(result).toBe(true)
-
-      // Verify it's deleted
-      const found = await service.getById(prospect.id)
-      expect(found).toBeNull()
     })
 
-    it('should return false for non-existent id', async () => {
-      const result = await service.delete('00000000-0000-0000-0000-000000000000')
+    it('should throw NotFoundError for non-existent id', async () => {
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 } as unknown as [])
 
-      expect(result).toBe(false)
+      await expect(service.delete('non-existent')).rejects.toThrow(NotFoundError)
+    })
+
+    it('should handle database errors', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Delete failed'))
+
+      await expect(service.delete('test-id')).rejects.toThrow(DatabaseError)
     })
   })
 
-  describe('getStats', () => {
-    it('should return prospect statistics', async () => {
-      await TestDataFactory.createProspects(5, { status: 'active' })
-      await TestDataFactory.createProspects(3, { status: 'converted' })
-      await TestDataFactory.createProspects(2, { status: 'archived' })
+  describe('claim', () => {
+    it('should claim a prospect for a user', async () => {
+      const mockClaimed = {
+        id: 'test-id',
+        company_name: 'Test Corp',
+        status: 'claimed',
+        claimed_by: 'user-123',
+        claimed_at: new Date().toISOString()
+      }
 
-      const stats = await service.getStats()
+      mockQuery.mockResolvedValueOnce([mockClaimed])
 
-      expect(stats).toBeDefined()
-      expect(stats.total_prospects).toBe(10)
-      expect(stats.active_prospects).toBe(5)
-      expect(stats.converted_prospects).toBe(3)
-      expect(stats.archived_prospects).toBe(2)
+      const result = await service.claim('test-id', 'user-123')
+
+      expect(result).toBeDefined()
+      expect(result.status).toBe('claimed')
+      expect(result.claimed_by).toBe('user-123')
     })
 
-    it('should calculate average risk score', async () => {
-      await TestDataFactory.createProspect({ riskScore: 60 })
-      await TestDataFactory.createProspect({ riskScore: 80 })
-      await TestDataFactory.createProspect({ riskScore: 90 })
+    it('should throw NotFoundError if prospect does not exist', async () => {
+      mockQuery.mockResolvedValueOnce([])
 
-      const stats = await service.getStats()
-
-      expect(stats.avg_risk_score).toBeCloseTo(76.67, 1)
+      await expect(service.claim('non-existent', 'user-123')).rejects.toThrow(NotFoundError)
     })
 
-    it('should return zero stats when no prospects exist', async () => {
-      const stats = await service.getStats()
+    it('should handle database errors', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('Claim failed'))
 
-      expect(stats.total_prospects).toBe(0)
-      expect(stats.active_prospects).toBe(0)
-      expect(stats.avg_risk_score).toBe(0)
+      await expect(service.claim('test-id', 'user-123')).rejects.toThrow(DatabaseError)
+    })
+  })
+
+  describe('batchClaim', () => {
+    it('should claim multiple prospects', async () => {
+      mockQuery
+        .mockResolvedValueOnce([{ id: '1', status: 'claimed' }])
+        .mockResolvedValueOnce([{ id: '2', status: 'claimed' }])
+        .mockResolvedValueOnce([{ id: '3', status: 'claimed' }])
+
+      const result = await service.batchClaim(['1', '2', '3'], 'user-123')
+
+      expect(result.success).toBe(3)
+      expect(result.failed).toBe(0)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('should handle partial failures', async () => {
+      mockQuery
+        .mockResolvedValueOnce([{ id: '1', status: 'claimed' }])
+        .mockResolvedValueOnce([]) // Not found
+        .mockResolvedValueOnce([{ id: '3', status: 'claimed' }])
+
+      const result = await service.batchClaim(['1', '2', '3'], 'user-123')
+
+      expect(result.success).toBe(2)
+      expect(result.failed).toBe(1)
+      expect(result.errors).toHaveLength(1)
+    })
+
+    it('should throw ValidationError when batch size exceeds 100', async () => {
+      const largeIds = Array.from({ length: 101 }, (_, i) => `id-${i}`)
+
+      await expect(service.batchClaim(largeIds, 'user-123')).rejects.toThrow(ValidationError)
+    })
+
+    it('should return success counts on all failures', async () => {
+      mockQuery.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+
+      const result = await service.batchClaim(['1', '2'], 'user-123')
+
+      expect(result.success).toBe(0)
+      expect(result.failed).toBe(2)
+      expect(result.errors).toHaveLength(2)
     })
   })
 })
