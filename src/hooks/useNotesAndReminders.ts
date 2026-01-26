@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useSafeKV as useKV } from '@/hooks/useSparkKV'
 import { ProspectNote, FollowUpReminder, OutreachEmail } from '@/lib/types'
 
 // Simple UUID generator using crypto API

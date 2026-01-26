@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useSafeKV as useKV } from '@/hooks/useSparkKV'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { StatsOverview } from '@/components/StatsOverview'
 import { ProspectDetailDialog } from '@/components/ProspectDetailDialog'

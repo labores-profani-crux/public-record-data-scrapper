@@ -216,7 +216,7 @@ export function ProspectsTab({
             return (
               <div
                 key={prospect.id}
-                className="relative"
+                className="relative h-full"
                 {...(index === 0 ? { 'data-tour': 'prospect-card' } : {})}
               >
                 <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10">

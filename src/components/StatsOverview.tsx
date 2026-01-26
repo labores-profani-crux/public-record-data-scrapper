@@ -29,6 +29,7 @@ function StatCard({
   const Icon = item.icon
   return (
     <motion.div
+      className="h-full"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -37,7 +38,7 @@ function StatCard({
         ease: [0.25, 0.46, 0.45, 0.94]
       }}
     >
-      <Card className="glass-effect p-4 md:p-6 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 group overflow-hidden relative border-2 hover:border-primary/30 hover:scale-105">
+      <Card className="glass-effect p-4 md:p-6 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 group overflow-hidden relative border-2 hover:border-primary/30 hover:scale-105 h-full">
         <motion.div
           className="absolute inset-0 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
           animate={{
@@ -79,9 +80,9 @@ function StatCard({
               {item.value}
             </motion.div>
             <div className="text-xs md:text-sm text-muted-foreground font-medium">{item.label}</div>
-            {item.subtitle && (
-              <div className="text-xs text-muted-foreground pt-1">{item.subtitle}</div>
-            )}
+            <div className="text-xs text-muted-foreground pt-1 min-h-[1rem]">
+              {item.subtitle || '\u00A0'}
+            </div>
           </div>
         </div>
       </Card>

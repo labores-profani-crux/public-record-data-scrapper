@@ -36,20 +36,21 @@ export function ProspectCard({ prospect, onSelect }: ProspectCardProps) {
   if (!isMobile) {
     return (
       <motion.div
+        className="h-full"
         whileHover={{ scale: 1.03, y: -8 }}
         whileTap={{ scale: 0.98 }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       >
         <Card
           className={cn(
-            'glass-effect p-4 sm:p-5 md:p-6 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer group overflow-hidden relative border-2',
+            'glass-effect p-4 sm:p-5 md:p-6 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer group overflow-hidden relative border-2 h-full flex flex-col',
             isClaimed && 'border-primary/50 shadow-lg shadow-primary/10'
           )}
           onClick={() => onSelect(prospect)}
         >
           <motion.div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-accent/8 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-          <div className="relative z-10">
+          <div className="relative z-10 flex flex-col flex-1">
             <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
               <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                 <motion.div
@@ -95,7 +96,7 @@ export function ProspectCard({ prospect, onSelect }: ProspectCardProps) {
               </div>
             </div>
 
-            <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
+            <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs sm:text-sm text-muted-foreground">Health Score</span>
                 <HealthGradeBadge grade={prospect.healthScore.grade} />

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useSafeKV as useKV } from '@/hooks/useSparkKV'
 import {
   generateProspects,
   generateCompetitorData,
