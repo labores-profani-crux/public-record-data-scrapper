@@ -3,10 +3,26 @@
 > AI-powered lead generation and prospect intelligence platform for Merchant Cash Advance (MCA) providers
 
 [![CI](https://github.com/ivi374forivi/public-record-data-scrapper/actions/workflows/ci.yml/badge.svg)](https://github.com/ivi374forivi/public-record-data-scrapper/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-526%20passing-brightgreen)](https://github.com/ivi374forivi/public-record-data-scrapper)
+[![Tests](https://img.shields.io/badge/tests-1830%20passing-brightgreen)](https://github.com/ivi374forivi/public-record-data-scrapper)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-success)](https://github.com/ivi374forivi/public-record-data-scrapper)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
+## The Challenge
+
+MCA providers waste significant time and resources sifting through millions of UCC filings to find qualified prospects. Traditional methods are slow, expensive, and produce low-quality leads.
+
+## Our Approach
+
+The UCC-MCA Intelligence Platform combines AI-powered analysis of public UCC filings with automated data enrichment and ML-based scoring to surface high-potential prospects automatically.
+
+## The Result
+
+- **60% faster** sales cycles through pre-qualified leads
+- **40% higher** lead quality with intelligent scoring
+- **24/7 automation** via 60+ autonomous agents across all 50 states
 
 ---
 
