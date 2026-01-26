@@ -30,7 +30,8 @@
     "video:generate": "bash scripts/video-production/generate-videos.sh",
     "video:validate": "npx tsx scripts/video-production/validate.ts",
     "video:help": "bash scripts/video-production/generate-videos.sh --help",
-    "prepare": "husky"
+    "prepare": "husky",
+    "share": "lt --port 5000"
   },
   "dependencies": {
     "@github/spark": "^0.44.5",
@@ -134,6 +135,7 @@
     "husky": "^9.1.7",
     "jsdom": "^27.2.0",
     "jsonwebtoken": "^9.0.3",
+    "localtunnel": "^2.0.2",
     "lint-staged": "^16.2.7",
     "prettier": "^3.6.2",
     "supertest": "^7.2.2",

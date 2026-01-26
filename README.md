@@ -127,6 +127,22 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
+### Sharing Your Dev Server
+
+Share your local dev server with remote users via a public URL:
+
+```bash
+# In one terminal, start the dev server
+npm run dev
+
+# In another terminal, create a public tunnel
+npm run share
+```
+
+This generates a public URL (e.g., `https://xyz.loca.lt`) that anyone can access.
+
+**Note**: For production use or more features (custom subdomains, password protection), consider [ngrok](https://ngrok.com).
+
 ## CLI Tool
 
 The platform includes a **standalone terminal-based scraper** for individual use:
