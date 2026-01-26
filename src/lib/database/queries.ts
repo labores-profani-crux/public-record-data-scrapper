@@ -7,6 +7,19 @@
 import { DatabaseClient } from './client'
 import { UCCFiling, Prospect, GrowthSignal, HealthScore } from '../types'
 
+export interface CompetitorRow {
+  id: string
+  lender_name: string
+  lender_name_normalized: string
+  filing_count: number
+  avg_deal_size: string
+  market_share: string
+  industries: string[]
+  top_state: string
+  monthly_trend: string
+  last_updated: Date
+}
+
 export class QueryBuilder {
   private client: DatabaseClient
 
@@ -296,6 +309,23 @@ export class QueryBuilder {
       },
       lastUpdated: row.created_at
     }
+  }
+
+  // ============================================================================
+  // COMPETITORS
+  // ============================================================================
+
+  /**
+   * Get competitor data
+   */
+  async getCompetitors(limit: number = 20): Promise<CompetitorRow[]> {
+    const query = `
+      SELECT * FROM competitors
+      ORDER BY market_share DESC
+      LIMIT $1
+    `
+    const result = await this.client.query<CompetitorRow>(query, [limit])
+    return result.rows
   }
 
   // ============================================================================
