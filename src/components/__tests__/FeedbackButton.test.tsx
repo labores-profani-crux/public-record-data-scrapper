@@ -111,23 +111,50 @@ vi.mock('@phosphor-icons/react', () => ({
   ChatCircleDots: () => <span data-testid="chat-icon" />
 }))
 
-const mockToast = {
+const mockToast = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn()
-}
+}))
 
 vi.mock('sonner', () => ({
   toast: mockToast
 }))
 
 describe('FeedbackButton', () => {
+  const originalLocalStorage = window.localStorage
+  let mockStorage: Record<string, string> = {}
+
   beforeEach(() => {
     vi.clearAllMocks()
-    localStorage.clear()
+    mockStorage = {}
+
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: vi.fn((key: string) => mockStorage[key] ?? null),
+        setItem: vi.fn((key: string, value: string) => {
+          mockStorage[key] = value
+        }),
+        removeItem: vi.fn((key: string) => {
+          delete mockStorage[key]
+        }),
+        clear: vi.fn(() => {
+          mockStorage = {}
+        }),
+        key: vi.fn((index: number) => Object.keys(mockStorage)[index] ?? null),
+        get length() {
+          return Object.keys(mockStorage).length
+        }
+      },
+      writable: true
+    })
   })
 
   afterEach(() => {
-    localStorage.clear()
+    Object.defineProperty(window, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true
+    })
+    vi.restoreAllMocks()
   })
 
   describe('rendering', () => {
@@ -161,11 +188,12 @@ describe('FeedbackButton', () => {
       render(<FeedbackButton />)
       await userEvent.click(screen.getByRole('button', { name: /give feedback/i }))
 
-      expect(screen.getByText(/component/i)).toBeInTheDocument()
-      expect(screen.getByText(/type of feedback/i)).toBeInTheDocument()
-      expect(screen.getByText(/priority/i)).toBeInTheDocument()
-      expect(screen.getByText(/device type/i)).toBeInTheDocument()
-      expect(screen.getByText(/description/i)).toBeInTheDocument()
+      // Use getAllByText since some labels match select placeholders
+      expect(screen.getAllByText(/component/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/type of feedback/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/priority/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/device type/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/description/i).length).toBeGreaterThan(0)
     })
 
     it('shows optional suggestion field', async () => {

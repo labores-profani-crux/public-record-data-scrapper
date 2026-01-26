@@ -189,10 +189,10 @@ vi.mock('@phosphor-icons/react', () => ({
   )
 }))
 
-const mockToast = {
+const mockToast = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn()
-}
+}))
 
 vi.mock('sonner', () => ({
   toast: mockToast

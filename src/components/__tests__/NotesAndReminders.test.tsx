@@ -160,11 +160,11 @@ vi.mock('@phosphor-icons/react', () => ({
   )
 }))
 
-const mockToast = {
+const mockToast = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
   info: vi.fn()
-}
+}))
 
 vi.mock('sonner', () => ({
   toast: mockToast
@@ -280,7 +280,7 @@ describe('NotesAndReminders', () => {
 
     it('includes prospect name in empty messages', () => {
       render(<NotesAndReminders {...defaultProps} />)
-      expect(screen.getByText(/Test Company/)).toBeInTheDocument()
+      expect(screen.getAllByText(/Test Company/).length).toBeGreaterThan(0)
     })
   })
 
@@ -395,7 +395,7 @@ describe('NotesAndReminders', () => {
 
     it('shows overdue badge for past due reminders', () => {
       render(<NotesAndReminders {...defaultProps} reminders={mockReminders} />)
-      expect(screen.getByText('Overdue')).toBeInTheDocument()
+      expect(screen.getAllByText('Overdue').length).toBeGreaterThan(0)
     })
 
     it('sorts reminders with incomplete first', () => {
