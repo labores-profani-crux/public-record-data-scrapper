@@ -55,14 +55,21 @@ export class GenerativeNarrativeEngine {
 
     // Parse structured response
     const sections = this.parseNarrativeResponse(response)
+    const confidence = this.calculateConfidence(sections)
+    const sources = this.extractSources(context)
 
     const narrative: GenerativeNarrative = {
       prospectId: prospect.id,
-      summary: response.substring(0, 500), // First 500 chars as summary
-      keyInsights: [], // TODO: Parse insights from response
-      riskFactors: [],
-      opportunities: [],
-      recommendedActions: [],
+      summary: sections.summary || response.substring(0, 500),
+      keyInsights: sections.keyFindings.map((text) => ({
+        category: 'key_finding',
+        text,
+        confidence,
+        sources
+      })),
+      riskFactors: sections.riskFactors,
+      opportunities: sections.opportunityAnalysis ? [sections.opportunityAnalysis] : [],
+      recommendedActions: sections.recommendedActions,
       generatedAt: new Date().toISOString()
     }
 
