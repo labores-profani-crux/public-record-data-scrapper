@@ -14,10 +14,63 @@ import type {
   Community,
   Researcher,
   Team,
-  Trend
+  Trend,
+  Institution
 } from './types'
 
 export class NetworkAnalyzer {
+  /**
+   * Helper to get or create an institution from a name string
+   */
+  private getOrCreateInstitution(
+    name: string,
+    institutions: Map<string, Institution>
+  ): Institution {
+    const cleanName = name.trim()
+    // Simple ID generation
+    const id = 'inst-' + cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+
+    if (institutions.has(id)) {
+      return institutions.get(id)!
+    }
+
+    // Infer type
+    let type: Institution['type'] = 'company'
+    const lower = cleanName.toLowerCase()
+    if (lower.includes('university') || lower.includes('college') || lower.includes('school')) {
+      type = 'university'
+    } else if (
+      lower.includes('hospital') ||
+      lower.includes('medical') ||
+      lower.includes('clinic')
+    ) {
+      type = 'hospital'
+    } else if (
+      lower.includes('institute') ||
+      lower.includes('laboratory') ||
+      lower.includes('center')
+    ) {
+      type = 'research_institute'
+    }
+
+    const institution: Institution = {
+      id,
+      name: cleanName,
+      type,
+      country: 'Unknown',
+      researchers: [],
+      papers: [],
+      topics: [],
+      collaborations: [],
+      paper_count: 0,
+      citation_count: 0,
+      h_index: 0
+    }
+
+    institutions.set(id, institution)
+    return institution
+  }
+
   /**
    * Calculate PageRank for papers in citation network
    */
@@ -37,7 +90,7 @@ export class NetworkAnalyzer {
     })
 
     // Count out-degrees
-    citations.forEach(citation => {
+    citations.forEach((citation) => {
       outDegree.set(citation.from, (outDegree.get(citation.from) || 0) + 1)
     })
 
@@ -49,7 +102,7 @@ export class NetworkAnalyzer {
         let rank = (1 - dampingFactor) / papers.size
 
         // Sum contributions from citing papers
-        citations.forEach(citation => {
+        citations.forEach((citation) => {
           if (citation.to === paperId) {
             const citingPaperRank = pageRank.get(citation.from) || 0
             const citingPaperOutDegree = outDegree.get(citation.from) || 1
@@ -76,13 +129,13 @@ export class NetworkAnalyzer {
     const pageRank = this.calculatePageRank(network.papers, network.citations)
 
     const ranked = Array.from(network.papers.values())
-      .map(paper => ({
+      .map((paper) => ({
         paper,
         rank: pageRank.get(paper.id) || 0
       }))
       .sort((a, b) => b.rank - a.rank)
       .slice(0, topN)
-      .map(item => item.paper)
+      .map((item) => item.paper)
 
     return ranked
   }
@@ -94,7 +147,7 @@ export class NetworkAnalyzer {
     const currentYear = new Date().getFullYear()
 
     const seminal = Array.from(network.papers.values())
-      .filter(paper => {
+      .filter((paper) => {
         const year = parseInt(paper.publicationDate)
         return currentYear - year >= minAge && paper.citationCount > 0
       })
@@ -114,7 +167,7 @@ export class NetworkAnalyzer {
       neighbors.set(paperId, new Set())
     })
 
-    citations.forEach(citation => {
+    citations.forEach((citation) => {
       neighbors.get(citation.from)?.add(citation.to)
       neighbors.get(citation.to)?.add(citation.from)
     })
@@ -138,7 +191,7 @@ export class NetworkAnalyzer {
         const neighborLabels = new Map<string, number>()
 
         // Count neighbor labels
-        neighbors.get(paperId)?.forEach(neighborId => {
+        neighbors.get(paperId)?.forEach((neighborId) => {
           const label = labels.get(neighborId)!
           neighborLabels.set(label, (neighborLabels.get(label) || 0) + 1)
         })
@@ -176,16 +229,16 @@ export class NetworkAnalyzer {
     const communities: Community[] = []
     let communityId = 1
 
-    communityPapers.forEach((paperIds, label) => {
+    communityPapers.forEach((paperIds) => {
       if (paperIds.length < 3) return // Skip tiny communities
 
       const communityAuthorIds = new Set<string>()
       const communityTopics = new Map<string, number>()
 
-      paperIds.forEach(paperId => {
+      paperIds.forEach((paperId) => {
         const paper = papers.get(paperId)!
-        paper.authors.forEach(author => communityAuthorIds.add(author.id))
-        paper.topics.forEach(topic => {
+        paper.authors.forEach((author) => communityAuthorIds.add(author.id))
+        paper.topics.forEach((topic) => {
           communityTopics.set(topic, (communityTopics.get(topic) || 0) + 1)
         })
       })
@@ -259,11 +312,11 @@ export class NetworkAnalyzer {
     // Group papers by topic and year
     const topicsByYear = new Map<string, Map<number, number>>()
 
-    papers.forEach(paper => {
+    papers.forEach((paper) => {
       const year = parseInt(paper.publicationDate)
       if (year < startYear) return
 
-      paper.topics.forEach(topic => {
+      paper.topics.forEach((topic) => {
         if (!topicsByYear.has(topic)) {
           topicsByYear.set(topic, new Map())
         }
@@ -312,8 +365,8 @@ export class NetworkAnalyzer {
 
       // Get paper IDs for this topic
       const paperIds = Array.from(papers.values())
-        .filter(p => p.topics.includes(topic))
-        .map(p => p.id)
+        .filter((p) => p.topics.includes(topic))
+        .map((p) => p.id)
 
       trends.push({
         topic,
@@ -334,15 +387,16 @@ export class NetworkAnalyzer {
     const researchers = new Map<string, Researcher>()
     const collaborations: Collaboration[] = []
     const collaborationMap = new Map<string, Collaboration>()
+    const institutions = new Map<string, Institution>()
 
     // Extract all researchers
-    papers.forEach(paper => {
-      paper.authors.forEach(author => {
+    papers.forEach((paper) => {
+      paper.authors.forEach((author) => {
         if (!researchers.has(author.id)) {
           researchers.set(author.id, {
             id: author.id,
             name: author.name,
-            affiliations: [], // TODO: Extract from papers
+            affiliations: [],
             papers: [],
             topics: [],
             h_index: 0, // TODO: Calculate
@@ -360,6 +414,37 @@ export class NetworkAnalyzer {
         const researcher = researchers.get(author.id)!
         researcher.papers.push(paper.id)
 
+        // Process affiliations
+        if (author.affiliations && author.affiliations.length > 0) {
+          author.affiliations.forEach((affilStr) => {
+            const institution = this.getOrCreateInstitution(affilStr, institutions)
+
+            // Link institution to researcher if not already linked
+            if (!researcher.affiliations.some((inst) => inst.id === institution.id)) {
+              researcher.affiliations.push(institution)
+            }
+
+            // Link researcher to institution
+            if (!institution.researchers.includes(researcher.id)) {
+              institution.researchers.push(researcher.id)
+            }
+
+            // Link paper to institution
+            if (!institution.papers.includes(paper.id)) {
+              institution.papers.push(paper.id)
+              institution.paper_count++
+              institution.citation_count += paper.citationCount
+            }
+
+            // Add topics to institution
+            paper.topics.forEach((topic) => {
+              if (!institution.topics.includes(topic)) {
+                institution.topics.push(topic)
+              }
+            })
+          })
+        }
+
         // Update date range
         if (paper.publicationDate < researcher.first_publication) {
           researcher.first_publication = paper.publicationDate
@@ -369,7 +454,7 @@ export class NetworkAnalyzer {
         }
 
         // Add topics
-        paper.topics.forEach(topic => {
+        paper.topics.forEach((topic) => {
           if (!researcher.topics.includes(topic)) {
             researcher.topics.push(topic)
           }
@@ -410,16 +495,16 @@ export class NetworkAnalyzer {
     })
 
     // Convert collaboration map to array
-    collaborationMap.forEach(collab => collaborations.push(collab))
+    collaborationMap.forEach((collab) => collaborations.push(collab))
 
     // Update researcher collaboration counts
-    collaborations.forEach(collab => {
-      collab.researchers.forEach(researcherId => {
+    collaborations.forEach((collab) => {
+      collab.researchers.forEach((researcherId) => {
         const researcher = researchers.get(researcherId)!
         researcher.collaboration_count++
 
         // Add collaborators
-        collab.researchers.forEach(otherId => {
+        collab.researchers.forEach((otherId) => {
           if (otherId !== researcherId && !researcher.collaborators.includes(otherId)) {
             researcher.collaborators.push(otherId)
           }
@@ -428,10 +513,10 @@ export class NetworkAnalyzer {
     })
 
     // Calculate h-index and citation stats
-    researchers.forEach(researcher => {
+    researchers.forEach((researcher) => {
       // Get all papers for this researcher
       const researcherPapers = researcher.papers
-        .map(id => papers.get(id))
+        .map((id) => papers.get(id))
         .filter((p): p is Paper => p !== undefined)
 
       // Calculate total citations
@@ -441,9 +526,7 @@ export class NetworkAnalyzer {
       )
 
       // Calculate h-index
-      const citations = researcherPapers
-        .map(p => p.citationCount)
-        .sort((a, b) => b - a)
+      const citations = researcherPapers.map((p) => p.citationCount).sort((a, b) => b - a)
 
       let h = 0
       for (let i = 0; i < citations.length; i++) {
@@ -457,7 +540,7 @@ export class NetworkAnalyzer {
     })
 
     // Update network sizes
-    researchers.forEach(researcher => {
+    researchers.forEach((researcher) => {
       researcher.network_size = researcher.collaborators.length
     })
 
@@ -468,7 +551,7 @@ export class NetworkAnalyzer {
       researchers,
       collaborations,
       teams,
-      institutions: new Map() // TODO: Extract from papers
+      institutions
     }
   }
 
@@ -496,14 +579,13 @@ export class NetworkAnalyzer {
 
       while (queue.length > 0) {
         const current = queue.shift()!
-        const currentResearcher = researchers.get(current)!
 
         // Add frequent collaborators (3+ papers together)
-        collaborations.forEach(collab => {
+        collaborations.forEach((collab) => {
           if (collab.strength < 3) return
           if (!collab.researchers.includes(current)) return
 
-          collab.researchers.forEach(otherId => {
+          collab.researchers.forEach((otherId) => {
             if (otherId !== current && !visited.has(otherId)) {
               team.add(otherId)
               queue.push(otherId)
@@ -518,10 +600,10 @@ export class NetworkAnalyzer {
         const teamPapers = new Set<string>()
         const teamTopics = new Map<string, number>()
 
-        teamMembers.forEach(memberId => {
+        teamMembers.forEach((memberId) => {
           const member = researchers.get(memberId)!
-          member.papers.forEach(paperId => teamPapers.add(paperId))
-          member.topics.forEach(topic => {
+          member.papers.forEach((paperId) => teamPapers.add(paperId))
+          member.topics.forEach((topic) => {
             teamTopics.set(topic, (teamTopics.get(topic) || 0) + 1)
           })
         })
@@ -535,10 +617,10 @@ export class NetworkAnalyzer {
         let leader = teamMembers[0]
         let maxConnections = 0
 
-        teamMembers.forEach(memberId => {
-          const connections = researchers.get(memberId)!.collaborators.filter(c =>
-            teamMembers.includes(c)
-          ).length
+        teamMembers.forEach((memberId) => {
+          const connections = researchers
+            .get(memberId)!
+            .collaborators.filter((c) => teamMembers.includes(c)).length
 
           if (connections > maxConnections) {
             maxConnections = connections
@@ -548,7 +630,7 @@ export class NetworkAnalyzer {
 
         // Calculate impact (average citations per paper)
         let totalCitations = 0
-        teamPapers.forEach(paperId => {
+        teamPapers.forEach((paperId) => {
           const paper = papers.get(paperId)
           if (paper) {
             totalCitations += paper.citationCount
@@ -585,7 +667,7 @@ export class NetworkAnalyzer {
     // Build adjacency list
     const graph = new Map<string, string[]>()
 
-    citations.forEach(citation => {
+    citations.forEach((citation) => {
       if (!graph.has(citation.from)) {
         graph.set(citation.from, [])
       }
@@ -649,7 +731,7 @@ export class NetworkAnalyzer {
 
     // Normalize
     const n = papers.size
-    const normFactor = (n - 1) * (n - 2) / 2
+    const normFactor = ((n - 1) * (n - 2)) / 2
 
     betweenness.forEach((value, paperId) => {
       betweenness.set(paperId, value / normFactor)
@@ -665,13 +747,13 @@ export class NetworkAnalyzer {
     const betweenness = this.calculateBetweennessCentrality(network.papers, network.citations)
 
     const bridges = Array.from(network.papers.values())
-      .map(paper => ({
+      .map((paper) => ({
         paper,
         betweenness: betweenness.get(paper.id) || 0
       }))
       .sort((a, b) => b.betweenness - a.betweenness)
       .slice(0, topN)
-      .map(item => item.paper)
+      .map((item) => item.paper)
 
     return bridges
   }
