@@ -74,7 +74,7 @@ CREATE TABLE disclosure_requirements (
 
 CREATE INDEX idx_disclosure_requirements_state ON disclosure_requirements(state);
 CREATE INDEX idx_disclosure_requirements_active ON disclosure_requirements(state, effective_date)
-    WHERE expiry_date IS NULL OR expiry_date > CURRENT_DATE;
+    WHERE expiry_date IS NULL;
 
 -- Disclosures (generated for deals)
 CREATE TABLE disclosures (
@@ -187,7 +187,7 @@ CREATE INDEX idx_consent_records_org ON consent_records(org_id);
 CREATE INDEX idx_consent_records_contact ON consent_records(contact_id);
 CREATE INDEX idx_consent_records_type ON consent_records(consent_type);
 CREATE INDEX idx_consent_records_active ON consent_records(contact_id, consent_type, is_granted)
-    WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP);
+    WHERE revoked_at IS NULL AND expires_at IS NULL;
 
 -- DNC (Do Not Call/Contact) list
 CREATE TABLE dnc_list (
@@ -224,7 +224,7 @@ CREATE INDEX idx_dnc_list_org ON dnc_list(org_id);
 CREATE INDEX idx_dnc_list_phone ON dnc_list(phone) WHERE phone IS NOT NULL;
 CREATE INDEX idx_dnc_list_email ON dnc_list(email) WHERE email IS NOT NULL;
 CREATE INDEX idx_dnc_list_active ON dnc_list(org_id, phone, email)
-    WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP;
+    WHERE expires_at IS NULL;
 
 -- Compliance alerts
 CREATE TABLE compliance_alerts (

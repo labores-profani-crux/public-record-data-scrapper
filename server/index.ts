@@ -291,13 +291,11 @@ export class Server {
 }
 
 // Start server if this file is run directly
-if (require.main === module) {
-  const server = new Server()
-  server.start()
+const server = new Server()
+server.start()
 
-  // Graceful shutdown
-  process.on('SIGTERM', () => server.shutdown())
-  process.on('SIGINT', () => server.shutdown())
-}
+// Graceful shutdown
+process.on('SIGTERM', () => server.shutdown())
+process.on('SIGINT', () => server.shutdown())
 
 export default Server

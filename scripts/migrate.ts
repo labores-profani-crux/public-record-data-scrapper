@@ -8,9 +8,14 @@
  */
 
 import { readFileSync, readdirSync } from 'fs'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { Pool } from 'pg'
 import { config } from 'dotenv'
+
+// ESM compatibility
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // Load environment variables
 config()
@@ -43,7 +48,7 @@ async function getAppliedMigrations(): Promise<Set<string>> {
 
 function getPendingMigrations(migrationsDir: string, appliedVersions: Set<string>): Migration[] {
   const files = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
+    .filter((f) => f.endsWith('.sql') && !f.includes('_down.sql'))
     .sort()
 
   const migrations: Migration[] = []
@@ -139,9 +144,7 @@ async function main() {
   }
 }
 
-// Run if executed directly
-if (require.main === module) {
-  main()
-}
+// Run the migration
+main()
 
 export { main as runMigrations }

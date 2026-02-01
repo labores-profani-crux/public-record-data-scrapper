@@ -170,7 +170,7 @@ CREATE INDEX idx_deal_stage_history_created ON deal_stage_history(created_at DES
 CREATE OR REPLACE FUNCTION generate_deal_number()
 RETURNS TRIGGER AS $$
 DECLARE
-    org_prefix VARCHAR(10);
+    org_prefix VARCHAR(100);
     next_num INTEGER;
 BEGIN
     IF NEW.deal_number IS NULL THEN

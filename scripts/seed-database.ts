@@ -2,164 +2,239 @@
 /**
  * Database Seed Script
  *
- * Seeds the database with sample data for development
+ * Seeds the database with comprehensive sample data for development.
+ * Uses database/seed.sql for the actual data insertion.
+ *
+ * Usage:
+ *   npm run seed           # Run seed with prompts
+ *   npm run seed -- --yes  # Skip confirmation prompts
+ *   npm run seed -- --force # Drop and recreate all data
  */
 
 import { createInterface } from 'node:readline'
-import { initDatabase, closeDatabase, createQueries } from '../apps/web/src/lib/database'
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import pg from 'pg'
 
-const sampleProspects = [
-  {
-    companyName: 'Acme Restaurant Group',
-    industry: 'restaurant' as const,
-    state: 'NY',
-    priorityScore: 92,
-    defaultDate: new Date('2024-01-15'),
-    timeSinceDefault: 180,
-    estimatedRevenue: 5000000
-  },
-  {
-    companyName: 'BuildRight Construction',
-    industry: 'construction' as const,
-    state: 'CA',
-    priorityScore: 88,
-    defaultDate: new Date('2024-02-01'),
-    timeSinceDefault: 165,
-    estimatedRevenue: 8000000
-  },
-  {
-    companyName: 'HealthPlus Medical Center',
-    industry: 'healthcare' as const,
-    state: 'TX',
-    priorityScore: 85,
-    defaultDate: new Date('2024-01-20'),
-    timeSinceDefault: 175,
-    estimatedRevenue: 12000000
-  },
-  {
-    companyName: 'TechInnovate Solutions',
-    industry: 'technology' as const,
-    state: 'CA',
-    priorityScore: 81,
-    defaultDate: new Date('2024-03-01'),
-    timeSinceDefault: 137,
-    estimatedRevenue: 3500000
-  },
-  {
-    companyName: 'Metro Retail Stores',
-    industry: 'retail' as const,
-    state: 'FL',
-    priorityScore: 78,
-    defaultDate: new Date('2024-02-15'),
-    timeSinceDefault: 151,
-    estimatedRevenue: 6500000
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// Load environment variables
+const dotenv = await import('dotenv')
+dotenv.config({ path: join(__dirname, '..', '.env.sandbox') })
+dotenv.config({ path: join(__dirname, '..', '.env') })
+
+const DATABASE_URL =
+  process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ucc_mca'
+
+interface SeedStats {
+  organizations: number
+  users: number
+  contacts: number
+  prospects: number
+  ucc_filings: number
+  deals: number
+  deal_documents: number
+  communications: number
+  audit_logs: number
+  consent_records: number
+  portfolio_companies: number
+  growth_signals: number
+  health_scores: number
+  competitors: number
+}
+
+async function getTableCounts(client: pg.Client): Promise<SeedStats> {
+  const tables = [
+    'organizations',
+    'users',
+    'contacts',
+    'prospects',
+    'ucc_filings',
+    'deals',
+    'deal_documents',
+    'communications',
+    'audit_logs',
+    'consent_records',
+    'portfolio_companies',
+    'growth_signals',
+    'health_scores',
+    'competitors'
+  ]
+
+  const stats: Record<string, number> = {}
+
+  for (const table of tables) {
+    try {
+      const result = await client.query(`SELECT COUNT(*) as count FROM ${table}`)
+      stats[table] = parseInt(result.rows[0].count, 10)
+    } catch {
+      stats[table] = 0
+    }
   }
-]
+
+  return stats as SeedStats
+}
+
+async function confirm(message: string): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args.includes('--yes') || args.includes('-y')) {
+    return true
+  }
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  })
+
+  return new Promise((resolve) => {
+    readline.question(`${message} (y/N): `, (answer) => {
+      readline.close()
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes')
+    })
+  })
+}
+
+async function clearExistingData(client: pg.Client): Promise<void> {
+  console.log('\n🗑️  Clearing existing data...')
+
+  // Disable triggers temporarily to allow audit log deletion
+  await client.query('SET session_replication_role = replica')
+
+  // Delete in order to respect foreign key constraints
+  const tables = [
+    'communication_events',
+    'communications',
+    'follow_up_reminders',
+    'communication_templates',
+    'compliance_alerts',
+    'consent_records',
+    'dnc_list',
+    'disclosures',
+    'deal_stage_history',
+    'deal_documents',
+    'deals',
+    'lenders',
+    'deal_stages',
+    'contact_activities',
+    'prospect_contacts',
+    'contacts',
+    'portfolio_health_scores',
+    'portfolio_companies',
+    'health_scores',
+    'growth_signals',
+    'prospect_ucc_filings',
+    'ucc_filings',
+    'enrichment_logs',
+    'ingestion_logs',
+    'prospects',
+    'api_keys',
+    'user_permissions',
+    'users',
+    'audit_logs',
+    'organizations',
+    'competitors'
+  ]
+
+  for (const table of tables) {
+    try {
+      await client.query(`DELETE FROM ${table}`)
+      console.log(`   ✓ Cleared ${table}`)
+    } catch {
+      // Table might not exist
+    }
+  }
+
+  // Re-enable triggers
+  await client.query('SET session_replication_role = DEFAULT')
+}
+
+async function runSeedSQL(client: pg.Client): Promise<void> {
+  console.log('\n📝 Running seed SQL...')
+
+  const seedPath = join(__dirname, '..', 'database', 'seed.sql')
+  const seedSQL = readFileSync(seedPath, 'utf-8')
+
+  await client.query(seedSQL)
+}
 
 async function main() {
-  console.log('🌱 Seeding database with sample data...\n')
+  console.log('🌱 MCA Platform - Database Seed Script')
+  console.log('━'.repeat(50))
+  console.log(`Database: ${DATABASE_URL.replace(/:[^@]+@/, ':***@')}`)
+  console.log('')
+
+  const args = process.argv.slice(2)
+  const forceMode = args.includes('--force') || args.includes('-f')
+
+  // Connect to database
+  const client = new pg.Client({ connectionString: DATABASE_URL })
 
   try {
-    // Initialize database
-    const db = await initDatabase()
-    const queries = createQueries(db)
+    await client.connect()
+    console.log('✓ Connected to database')
 
-    // Check if data already exists
-    const existingStats = await queries.getProspectStats()
-    if (existingStats.total > 0) {
-      console.log(`⚠️  Database already contains ${existingStats.total} prospect(s)`)
-      const readline = createInterface({
-        input: process.stdin,
-        output: process.stdout
-      })
+    // Check existing data
+    const beforeStats = await getTableCounts(client)
+    const hasExistingData = Object.values(beforeStats).some((count) => count > 0)
 
-      const answer = await new Promise<string>((resolve) => {
-        readline.question('Continue seeding? (y/N): ', resolve)
-      })
-      readline.close()
+    if (hasExistingData) {
+      console.log('\n📊 Current data:')
+      console.log(`   Organizations: ${beforeStats.organizations}`)
+      console.log(`   Users: ${beforeStats.users}`)
+      console.log(`   Contacts: ${beforeStats.contacts}`)
+      console.log(`   Prospects: ${beforeStats.prospects}`)
+      console.log(`   Deals: ${beforeStats.deals}`)
 
-      if (answer.toLowerCase() !== 'y') {
-        console.log('❌ Seeding cancelled')
-        await closeDatabase()
-        return
-      }
-    }
-
-    console.log(`📝 Creating ${sampleProspects.length} sample prospects...\n`)
-
-    for (const prospectData of sampleProspects) {
-      try {
-        // Create prospect
-        const prospect = await queries.createProspect(prospectData)
-        console.log(`✅ Created: ${prospect.company_name} (Score: ${prospect.priority_score})`)
-
-        // Add UCC filing
-        const filing = await queries.createUCCFiling({
-          externalId: `${prospect.state}-2024-${Math.floor(Math.random() * 100000)}`,
-          filingDate: prospectData.defaultDate,
-          debtorName: prospectData.companyName,
-          securedParty: 'First Capital MCA',
-          state: prospectData.state,
-          lienAmount: Math.floor(prospectData.estimatedRevenue * 0.05),
-          status: 'lapsed',
-          filingType: 'UCC-1',
-          source: 'sample-data'
-        })
-
-        // Link filing to prospect
-        await queries.linkUCCFilingToProspect(prospect.id, filing.id)
-
-        // Add growth signals
-        const signals = [
-          {
-            type: 'hiring',
-            source: 'indeed',
-            description: 'Posted 2 new job openings',
-            confidence: 0.85,
-            metadata: { positions: ['Manager', 'Server'] }
-          },
-          {
-            type: 'expansion',
-            source: 'news',
-            description: 'Announced new location opening',
-            confidence: 0.92,
-            metadata: { location: 'Downtown' }
-          }
-        ]
-
-        for (const signalData of signals) {
-          await queries.createGrowthSignal({
-            prospectId: prospect.id,
-            type: signalData.type,
-            source: signalData.source,
-            description: signalData.description,
-            detectedDate: new Date(),
-            confidence: signalData.confidence,
-            metadata: signalData.metadata
-          })
+      if (forceMode) {
+        console.log('\n⚠️  Force mode enabled - will clear existing data')
+        await clearExistingData(client)
+      } else {
+        const shouldContinue = await confirm('\n⚠️  Database has existing data. Clear and reseed?')
+        if (!shouldContinue) {
+          console.log('❌ Seeding cancelled')
+          await client.end()
+          process.exit(0)
         }
-
-        console.log(`   - Added ${signals.length} growth signals\n`)
-      } catch (error) {
-        console.error(`❌ Failed to create ${prospectData.companyName}:`, error)
+        await clearExistingData(client)
       }
     }
+
+    // Run seed SQL
+    await runSeedSQL(client)
 
     // Show final stats
-    console.log('📊 Final Statistics:')
-    const finalStats = await queries.getProspectStats()
-    console.log(`   - Total Prospects: ${finalStats.total}`)
-    console.log(`   - Average Score: ${finalStats.avgScore.toFixed(1)}`)
-    console.log(`   - By Status:`, finalStats.byStatus)
-    console.log(`   - By Industry:`, finalStats.byIndustry)
-    console.log('')
+    const afterStats = await getTableCounts(client)
 
-    await closeDatabase()
-    console.log('🎉 Database seeded successfully!')
+    console.log('\n📊 Seed Results:')
+    console.log('━'.repeat(50))
+    console.log(`   Organizations:      ${afterStats.organizations}`)
+    console.log(`   Users:              ${afterStats.users}`)
+    console.log(`   Contacts:           ${afterStats.contacts}`)
+    console.log(`   Prospects:          ${afterStats.prospects}`)
+    console.log(`   UCC Filings:        ${afterStats.ucc_filings}`)
+    console.log(`   Deals:              ${afterStats.deals}`)
+    console.log(`   Deal Documents:     ${afterStats.deal_documents}`)
+    console.log(`   Communications:     ${afterStats.communications}`)
+    console.log(`   Audit Logs:         ${afterStats.audit_logs}`)
+    console.log(`   Consent Records:    ${afterStats.consent_records}`)
+    console.log(`   Portfolio Companies:${afterStats.portfolio_companies}`)
+    console.log(`   Growth Signals:     ${afterStats.growth_signals}`)
+    console.log(`   Health Scores:      ${afterStats.health_scores}`)
+    console.log(`   Competitors:        ${afterStats.competitors}`)
+    console.log('━'.repeat(50))
+
+    console.log('\n🎉 Database seeded successfully!')
+    console.log('')
+    console.log('Next steps:')
+    console.log('  npm run dev:full    # Start the full platform')
+    console.log('  open http://localhost:5173')
+    console.log('')
   } catch (error) {
-    console.error('❌ Seeding failed:', error)
-    await closeDatabase()
+    console.error('\n❌ Seeding failed:', error)
     process.exit(1)
+  } finally {
+    await client.end()
   }
 }
 

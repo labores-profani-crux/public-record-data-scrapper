@@ -310,7 +310,7 @@ CREATE TRIGGER update_portfolio_companies_updated_at
 CREATE OR REPLACE FUNCTION calculate_time_since_default()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.time_since_default = EXTRACT(DAY FROM (CURRENT_DATE - NEW.default_date))::INTEGER;
+    NEW.time_since_default = (CURRENT_DATE - NEW.default_date)::INTEGER;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

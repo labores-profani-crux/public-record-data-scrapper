@@ -15,3 +15,6 @@ export * from './ach'
 
 // AWS (S3 Document Storage)
 export * from './aws'
+
+// Plaid (Bank Account Verification & Transactions)
+export * from './plaid'
