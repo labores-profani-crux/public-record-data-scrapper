@@ -47,12 +47,14 @@ server/
 ## API Endpoints
 
 ### Health Checks
+
 - `GET /api/health` - Basic health check
 - `GET /api/health/detailed` - Detailed health with dependencies
 - `GET /api/health/ready` - Kubernetes readiness probe
 - `GET /api/health/live` - Kubernetes liveness probe
 
 ### Prospects
+
 - `GET /api/prospects` - List prospects (paginated, filtered, sorted)
 - `GET /api/prospects/:id` - Get prospect details
 - `POST /api/prospects` - Create prospect
@@ -60,18 +62,21 @@ server/
 - `DELETE /api/prospects/:id` - Delete prospect
 
 ### Competitors
+
 - `GET /api/competitors` - List competitors (paginated, filtered, sorted)
 - `GET /api/competitors/:id` - Get competitor details
 - `GET /api/competitors/:id/analysis` - Get SWOT analysis
 - `GET /api/competitors/stats` - Get competitor statistics
 
 ### Portfolio
+
 - `GET /api/portfolio` - List portfolio companies (paginated, filtered, sorted)
 - `GET /api/portfolio/:id` - Get portfolio company details
 - `GET /api/portfolio/:id/health-history` - Get health score history
 - `GET /api/portfolio/stats` - Get portfolio statistics
 
 ### Enrichment
+
 - `POST /api/enrichment/prospect` - Enrich single prospect
 - `POST /api/enrichment/batch` - Batch enrich prospects
 - `POST /api/enrichment/refresh` - Trigger data refresh
@@ -79,6 +84,7 @@ server/
 - `GET /api/enrichment/queue` - Get enrichment queue status
 
 ### Job Queue
+
 - `POST /api/jobs/ingestion` - Trigger UCC ingestion job
 - `POST /api/jobs/enrichment` - Trigger enrichment job
 - `POST /api/jobs/health-scores` - Trigger health score calculation
@@ -92,9 +98,39 @@ server/
 See `.env.example` in the project root for all available environment variables.
 
 Required variables:
+
 - `DATABASE_URL` - PostgreSQL connection string
 - `PORT` - Server port (default: 3000)
 - `NODE_ENV` - Environment (development/production)
+
+Optional tiered integration variables (used when routing by `x-data-tier`):
+
+- `FREE_TIER_DNB_API_KEY`, `STARTER_TIER_DNB_API_KEY`
+- `FREE_TIER_GOOGLE_PLACES_API_KEY`, `STARTER_TIER_GOOGLE_PLACES_API_KEY`
+- `FREE_TIER_CLEARBIT_API_KEY`, `STARTER_TIER_CLEARBIT_API_KEY`
+- `FREE_TIER_NEWS_API_KEY`, `STARTER_TIER_NEWS_API_KEY`
+- `FREE_TIER_CSC_UCC_API_KEY`, `STARTER_TIER_CSC_UCC_API_KEY`
+- `FREE_TIER_CSC_UCC_USERNAME`, `STARTER_TIER_CSC_UCC_USERNAME`
+- `FREE_TIER_CTCORP_API_KEY`, `STARTER_TIER_CTCORP_API_KEY`
+- `FREE_TIER_LEXISNEXIS_API_KEY`, `STARTER_TIER_LEXISNEXIS_API_KEY`
+- `FREE_TIER_LEXISNEXIS_CUSTOMER_ID`, `STARTER_TIER_LEXISNEXIS_CUSTOMER_ID`
+
+If tiered variables are unset, the server falls back to the non-tiered env vars
+(e.g., `DNB_API_KEY`, `GOOGLE_PLACES_API_KEY`).
+
+## Data Tiering
+
+The server routes requests by `x-data-tier`. OSS/free values resolve to `free-tier`,
+paid values resolve to `starter-tier`, and responses include `x-data-tier-resolved`.
+
+Tier limits/filters:
+
+- Prospects: free-tier clamps `limit` to 20 and enforces `min_score >= 70`; starter-tier allows up to 100.
+- Competitors: free-tier clamps `limit` to 20 and requires at least 3 filings per competitor; starter-tier allows up to 100 with no minimum.
+- UCC ingestion selects a provider (CSC/CTCorp/LexisNexis) per tier when credentials are present; the chosen `uccProvider` is stored in job data and surfaced via `/api/jobs/:jobId`.
+
+Job workers (ingestion/health/enrichment) resolve tiered integrations using the
+same env mapping and log which integrations are enabled per tier.
 
 ## Getting Started
 
@@ -223,6 +259,7 @@ All request data is validated using Zod schemas. Invalid requests return 400 wit
 Default rate limit: 100 requests per 15 minutes per IP address.
 
 Response headers:
+
 - `X-RateLimit-Limit` - Maximum requests allowed
 - `X-RateLimit-Remaining` - Requests remaining
 - `X-RateLimit-Reset` - Timestamp when limit resets
@@ -241,6 +278,7 @@ npm run test:coverage
 ## Logging
 
 All requests are logged with:
+
 - Timestamp
 - Correlation ID (UUID)
 - HTTP method and path
@@ -248,6 +286,7 @@ All requests are logged with:
 - Response time
 
 Example log:
+
 ```
 [REQUEST] {
   timestamp: '2025-01-17T10:30:00.000Z',
@@ -287,6 +326,7 @@ The backend includes a BullMQ-based job queue system for background processing a
 ### Usage
 
 See `server/queue/README.md` for detailed documentation on:
+
 - Job monitoring API endpoints
 - Manual job triggering
 - Worker configuration
@@ -320,6 +360,7 @@ REDIS_PASSWORD=your-password
 ## Security
 
 ### Implemented
+
 - Helmet.js security headers
 - CORS configuration
 - Rate limiting
@@ -327,6 +368,7 @@ REDIS_PASSWORD=your-password
 - SQL injection prevention (parameterized queries)
 
 ### Planned (Phase 4)
+
 - JWT authentication
 - API key authentication
 - Role-based access control (RBAC)
@@ -338,6 +380,7 @@ REDIS_PASSWORD=your-password
 ### Health Checks
 
 The `/api/health/detailed` endpoint checks:
+
 - Database connectivity
 - Memory usage
 - CPU usage
@@ -345,6 +388,7 @@ The `/api/health/detailed` endpoint checks:
 ### Metrics (Phase 5)
 
 Will expose Prometheus metrics at `/metrics`:
+
 - HTTP request duration
 - Request count by route and status
 - Database connection pool stats

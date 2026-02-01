@@ -1,5 +1,6 @@
 import { getIngestionQueue, getEnrichmentQueue, getHealthScoreQueue } from './queues'
 import { database } from '../database/connection'
+import { resolveUccProvider } from '../config/tieredIntegrations'
 
 export class JobScheduler {
   private scheduledJobs: Map<string, NodeJS.Timeout> = new Map()
@@ -101,6 +102,8 @@ export class JobScheduler {
 
     // Get list of states to scrape (from config or database)
     const states = ['NY', 'CA', 'TX', 'FL', 'IL', 'PA', 'OH', 'GA', 'NC', 'MI']
+    const dataTier = 'free-tier'
+    const uccProvider = resolveUccProvider(dataTier)
 
     console.log(`[Scheduler] Queueing UCC ingestion for ${states.length} states`)
 
@@ -109,7 +112,9 @@ export class JobScheduler {
         `ingest-${state}`,
         {
           state,
-          batchSize: 1000
+          batchSize: 1000,
+          dataTier,
+          uccProvider
         },
         {
           priority: 1,

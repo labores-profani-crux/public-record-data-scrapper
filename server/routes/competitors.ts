@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { validateRequest } from '../middleware/validateRequest'
 import { asyncHandler } from '../middleware/errorHandler'
 import { CompetitorsService } from '../services/CompetitorsService'
+import { getResolvedDataTier } from '../middleware/dataTier'
 
 const router = Router()
 
@@ -27,7 +28,8 @@ router.get(
   validateRequest({ query: querySchema }),
   asyncHandler(async (req, res) => {
     const competitorsService = new CompetitorsService()
-    const result = await competitorsService.list(req.query as CompetitorsQuery)
+    const dataTier = getResolvedDataTier(req)
+    const result = await competitorsService.list(req.query as CompetitorsQuery, dataTier)
 
     res.json({
       competitors: result.competitors,

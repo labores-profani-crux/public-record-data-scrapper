@@ -189,7 +189,7 @@ describeConditional('Ingestion Worker', () => {
       await processPromise
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[Ingestion Worker] Starting UCC ingestion for state: CA'
+        '[Ingestion Worker] Starting UCC ingestion for state: CA (free-tier)'
       )
     })
 

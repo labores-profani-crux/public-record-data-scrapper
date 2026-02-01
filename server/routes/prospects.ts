@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { validateRequest } from '../middleware/validateRequest'
 import { asyncHandler } from '../middleware/errorHandler'
 import { ProspectsService } from '../services/ProspectsService'
+import { getResolvedDataTier, type ResolvedDataTier } from '../middleware/dataTier'
 
 const router = Router()
 
@@ -43,13 +44,45 @@ const idParamSchema = z.object({
 
 type ProspectsQuery = z.infer<typeof querySchema>
 
+const PROSPECT_TIER_LIMITS: Record<ResolvedDataTier, number> = {
+  'free-tier': 20,
+  'starter-tier': 100
+}
+
+const FREE_TIER_MIN_SCORE = 70
+
+function applyProspectTierConstraints(
+  query: ProspectsQuery,
+  dataTier: ResolvedDataTier
+): ProspectsQuery {
+  const maxLimit = PROSPECT_TIER_LIMITS[dataTier]
+  const limit = Math.min(query.limit, maxLimit)
+
+  if (dataTier !== 'free-tier') {
+    return { ...query, limit }
+  }
+
+  const minScore =
+    query.min_score === undefined
+      ? FREE_TIER_MIN_SCORE
+      : Math.max(query.min_score, FREE_TIER_MIN_SCORE)
+
+  return {
+    ...query,
+    limit,
+    min_score: minScore
+  }
+}
+
 // GET /api/prospects - List prospects (paginated, filtered, sorted)
 router.get(
   '/',
   validateRequest({ query: querySchema }),
   asyncHandler(async (req, res) => {
     const prospectsService = new ProspectsService()
-    const result = await prospectsService.list(req.query as ProspectsQuery)
+    const dataTier = getResolvedDataTier(req)
+    const tieredQuery = applyProspectTierConstraints(req.query as ProspectsQuery, dataTier)
+    const result = await prospectsService.list(tieredQuery)
 
     res.json({
       prospects: result.prospects,

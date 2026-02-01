@@ -1,21 +1,23 @@
 # UCC Scraper Testing Guide
 
-This guide explains how to test and validate the TX/FL/CA UCC scrapers.
+This guide explains how to test and validate the TX/FL/CA/NY UCC scrapers.
 
 ## Quick Start
 
 ```bash
-# Test all three scrapers (TX, FL, CA)
+# Test all scrapers (TX, FL, CA, NY)
 npm run test:scrapers
 
 # Test individual states
 npm run test:scrapers:tx
 npm run test:scrapers:fl
 npm run test:scrapers:ca
+npm run test:scrapers:ny
 
 # Run in headed mode (see browser)
 npm run test:scrapers:headed
 npm run test:scrapers -- TX --headed
+npm run test:scrapers -- NY --headed
 ```
 
 ## Test Output
@@ -24,7 +26,8 @@ The test suite generates:
 
 1. **Console Output**: Real-time test progress with colored indicators
 2. **JSON Report**: Detailed results in `test-results/run-{timestamp}/report.json`
-3. **Screenshots**: Captured on failures (when implemented)
+3. **Screenshots**: Captured on failures in `test-results/run-{timestamp}/artifacts/`
+4. **HTML Snapshots**: DOM dumps on failures in the same `artifacts/` folder
 
 ### Sample Console Output
 
@@ -35,12 +38,11 @@ Testing TX UCC Scraper
 
 [1/3] Testing: Tesla Inc
 Description: Large public company
-✅ Success - Found 0 filings in 5234ms
-   No filings found (this may be expected)
+⚠️ Skipped - Texas UCC searches now run inside the SOS Portal. Configure TX_UCC_USERNAME/TX_UCC_PASSWORD to run live tests.
 
 [2/3] Testing: Dell Technologies
 Description: Texas-based tech company
-❌ Failed - Texas UCC portal requires SOS Portal account login (as of Sept 2025)
+⚠️ Skipped - Texas UCC portal requires SOS Portal account login (as of Sept 2025). Live tests run only when credentials are set.
 ```
 
 ## Understanding Results
@@ -48,43 +50,55 @@ Description: Texas-based tech company
 ### Success Scenarios
 
 **✅ Success with Results**
+
 ```
 ✅ Success - Found 5 filings in 3452ms
    First filing: 2023-001234 - ACME Corporation
 ```
+
 This means the scraper successfully navigated the portal, submitted the search, and extracted filing data.
 
 **✅ Success with Zero Results**
+
 ```
 ✅ Success - Found 0 filings in 2841ms
    No filings found (this may be expected)
 ```
+
 This means the scraper worked correctly but the company has no UCC filings on record (or the search term yielded no matches).
 
 ### Failure Scenarios
 
 **❌ Authentication Required (Texas)**
+
 ```
-❌ Failed - Texas UCC portal requires SOS Portal account login (as of Sept 2025)
+⚠️ Skipped - Texas UCC portal requires SOS Portal account login (as of Sept 2025). Live tests run only when credentials are set.
 ```
+
 **Fix**: Implement authentication support (see next section)
 
 **❌ CAPTCHA Detected**
+
 ```
 ❌ Failed - CAPTCHA detected - manual intervention required
 ```
+
 **Fix**: Either solve CAPTCHA manually or implement CAPTCHA solving service
 
 **❌ Form Not Found**
+
 ```
 ❌ Failed - Unable to locate debtor name search field on Florida UCC portal
 ```
+
 **Fix**: Portal structure changed. Need to update selectors.
 
 **❌ Network/Timeout Issues**
+
 ```
 ❌ Exception - Navigation timeout of 45000 ms exceeded
 ```
+
 **Fix**: Increase timeout or check network connectivity
 
 ## Test Report Structure
@@ -132,7 +146,7 @@ const TEST_CASES: Record<string, TestCase[]> = {
       companyName: 'Your Company Name',
       description: 'Description here',
       expectedMinResults: 0
-    },
+    }
     // ... more test cases
   ]
 }
@@ -141,23 +155,30 @@ const TEST_CASES: Record<string, TestCase[]> = {
 ## Debugging Failed Tests
 
 ### 1. Run in Headed Mode
+
 ```bash
 npm run test:scrapers -- TX --headed
 ```
+
 This opens the browser so you can watch the scraper navigate the portal in real-time.
 
 ### 2. Check the Search URL
+
 Look at the `searchUrl` field in the test report to see what page the scraper ended up on.
 
 ### 3. Manual Verification
+
 Visit the portal manually to:
+
 - Confirm it's accessible
 - Check if login is required
 - Verify search form structure hasn't changed
 - Test if CAPTCHA is triggered
 
 ### 4. Adjust Rate Limiting
+
 If getting blocked/rate-limited:
+
 - Increase wait time between tests (currently 15s)
 - Reduce number of test cases
 - Use different test company names
@@ -165,17 +186,25 @@ If getting blocked/rate-limited:
 ## Known Issues & Limitations
 
 ### Texas (TX)
+
 - ❌ **Requires Login**: As of September 2025, requires SOS Portal account
 - **Workaround**: Implement authentication support or use manual searches
 
 ### Florida (FL)
+
 - ⚠️ **Exact Name Matching**: Very picky about exact company name formatting
 - ⚠️ **Bot Detection**: May encounter rate limiting or blocking
 - **Workaround**: Use varied test names, increase delays between tests
 
 ### California (CA)
-- ⚠️ **May Require Account**: Some searches may require free account
-- ✅ **Free Searches Available**: Basic searches work without login
+
+- ❌ **Anti-bot Blocking**: Automated access is currently blocked by Incapsula/Imperva in many environments
+- ✅ **Manual Access Possible**: Headed runs can capture DOM/screenshot artifacts for troubleshooting
+
+### New York (NY)
+
+- ✅ **Standard Debtor Search Supported**: Uses the NYS Standard Debtor Search form and parses the Filing Data Report
+- ⚠️ **Portal Availability**: If the DOS site returns a "page unavailable/offline" message, the scraper will fail fast
 
 ## Next Steps
 
@@ -193,6 +222,7 @@ To avoid getting blocked:
 - **Texas**: 3 requests/minute (conservative)
 - **Florida**: 4 requests/minute (privatized system)
 - **California**: 4 requests/minute (state portal)
+- **New York**: 5 requests/minute (standard debtor search)
 
 Test suite automatically waits 15 seconds between tests within the same state.
 
@@ -217,16 +247,19 @@ When adding test cases:
 ## Troubleshooting
 
 **"Module not found" errors**
+
 ```bash
 npm install
 ```
 
 **"Permission denied" on test-results folder**
+
 ```bash
 chmod -R 755 test-results/
 ```
 
 **Tests hanging indefinitely**
+
 - Check if process is waiting for CAPTCHA
 - Verify network connectivity
 - Increase timeout in scraper config

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { validateRequest } from '../middleware/validateRequest'
 import { asyncHandler } from '../middleware/errorHandler'
+import { getResolvedDataTier } from '../middleware/dataTier'
 import { EnrichmentService } from '../services/EnrichmentService'
 
 const router = Router()
@@ -25,7 +26,8 @@ router.post(
   validateRequest({ body: enrichProspectSchema }),
   asyncHandler(async (req, res) => {
     const enrichmentService = new EnrichmentService()
-    const result = await enrichmentService.enrichProspect(req.body.prospect_id)
+    const dataTier = getResolvedDataTier(req)
+    const result = await enrichmentService.enrichProspect(req.body.prospect_id, dataTier)
 
     res.json({
       prospect_id: req.body.prospect_id,
@@ -41,12 +43,13 @@ router.post(
   validateRequest({ body: batchEnrichSchema }),
   asyncHandler(async (req, res) => {
     const enrichmentService = new EnrichmentService()
-    const results = await enrichmentService.enrichBatch(req.body.prospect_ids)
+    const dataTier = getResolvedDataTier(req)
+    const results = await enrichmentService.enrichBatch(req.body.prospect_ids, dataTier)
 
     res.json({
       total: req.body.prospect_ids.length,
-      successful: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length,
+      successful: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
       results
     })
   })
@@ -58,7 +61,8 @@ router.post(
   validateRequest({ body: triggerRefreshSchema }),
   asyncHandler(async (req, res) => {
     const enrichmentService = new EnrichmentService()
-    const result = await enrichmentService.triggerRefresh(req.body.force)
+    const dataTier = getResolvedDataTier(req)
+    const result = await enrichmentService.triggerRefresh(req.body.force, dataTier)
 
     res.json({
       triggered: true,

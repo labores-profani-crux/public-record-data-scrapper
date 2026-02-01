@@ -10,27 +10,34 @@
 
 import { BaseScraper, ScraperResult } from '../base-scraper'
 import puppeteer, { Browser, Page } from 'puppeteer'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { getTexasCredentials, hasTexasAuth } from '../auth-config'
 import { PaginationHandler } from '../pagination-handler'
 
 export class TexasScraper extends BaseScraper {
   private browser: Browser | null = null
   private isAuthenticated: boolean = false
+  private lastPage: Page | null = null
+  private headless: boolean
+  private keepPageOpenOnFailure: boolean
 
-  constructor() {
+  constructor(options: { headless?: boolean; keepPageOpenOnFailure?: boolean } = {}) {
     super({
       state: 'TX',
-      baseUrl: 'https://www.sos.state.tx.us/ucc/index.shtml',
+      baseUrl: 'https://direct.sos.state.tx.us/',
       rateLimit: 3, // 3 requests per minute (conservative for new portal)
       timeout: 45000, // Increased timeout for portal that requires login
       retryAttempts: 2
     })
+    this.headless = options.headless ?? true
+    this.keepPageOpenOnFailure = options.keepPageOpenOnFailure ?? false
   }
 
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: true,
+        headless: this.headless,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -49,6 +56,50 @@ export class TexasScraper extends BaseScraper {
       await this.browser.close()
       this.browser = null
       this.isAuthenticated = false
+      this.lastPage = null
+    }
+  }
+
+  async captureDiagnostics(
+    outputDir: string,
+    baseName: string
+  ): Promise<{ screenshotPath?: string; htmlPath?: string }> {
+    if (!this.lastPage || this.lastPage.isClosed()) {
+      return {}
+    }
+
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true })
+    }
+
+    const screenshotPath = join(outputDir, `${baseName}.png`)
+    const htmlPath = join(outputDir, `${baseName}.html`)
+
+    let savedScreenshot = false
+    let savedHtml = false
+
+    try {
+      await this.lastPage.screenshot({ path: screenshotPath, fullPage: true })
+      savedScreenshot = true
+    } catch (error) {
+      this.log('warn', 'Failed to capture screenshot', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    try {
+      const html = await this.lastPage.content()
+      writeFileSync(htmlPath, html)
+      savedHtml = true
+    } catch (error) {
+      this.log('warn', 'Failed to capture HTML snapshot', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    return {
+      screenshotPath: savedScreenshot ? screenshotPath : undefined,
+      htmlPath: savedHtml ? htmlPath : undefined
     }
   }
 
@@ -78,8 +129,8 @@ export class TexasScraper extends BaseScraper {
     try {
       this.log('info', 'Attempting to authenticate with Texas SOS Portal')
 
-      // Navigate to login page (adjust URL as needed)
-      const loginUrl = 'https://www.sos.state.tx.us/ucc/login' // This may need adjustment
+      // Navigate to SOSDirect login page
+      const loginUrl = 'https://direct.sos.state.tx.us/'
       await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: this.config.timeout })
 
       // Wait for login form
@@ -87,39 +138,26 @@ export class TexasScraper extends BaseScraper {
 
       // Find and fill username field
       const usernameField = await page.evaluate(() => {
-        const selectors = [
-          'input[name="username"]',
-          'input[name="email"]',
-          'input[type="email"]',
-          'input[id="username"]',
-          'input[id="email"]',
-          'input[placeholder*="username" i]',
-          'input[placeholder*="email" i]'
-        ]
-
-        for (const selector of selectors) {
-          const input = document.querySelector(selector) as HTMLInputElement
-          if (input && input.offsetParent !== null) {
-            return selector
-          }
-        }
-        return null
+        const input = document.querySelector('input[name="client_id"]') as HTMLInputElement | null
+        return input && input.offsetParent !== null ? 'input[name="client_id"]' : null
       })
 
       if (!usernameField) {
         return {
           success: false,
-          error: 'Could not locate username/email field on login page'
+          error: 'Could not locate SOSDirect USER ID field on login page'
         }
       }
 
       await page.type(usernameField, credentials.username, { delay: 100 })
-      this.log('info', 'Username entered')
+      this.log('info', 'SOSDirect USER ID entered')
 
       // Find and fill password field
       const passwordField = await page.evaluate(() => {
-        const input = document.querySelector('input[type="password"]') as HTMLInputElement
-        return input && input.offsetParent !== null ? 'input[type="password"]' : null
+        const input = document.querySelector(
+          'input[name="web_password"]'
+        ) as HTMLInputElement | null
+        return input && input.offsetParent !== null ? 'input[name="web_password"]' : null
       })
 
       if (!passwordField) {
@@ -134,15 +172,19 @@ export class TexasScraper extends BaseScraper {
 
       // Find and click submit button
       const loginButton = await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'))
-        const loginBtn = buttons.find((btn) => {
-          const text =
-            (btn as HTMLElement).textContent?.toLowerCase() ||
-            (btn as HTMLInputElement).value?.toLowerCase() ||
-            ''
-          return text.includes('login') || text.includes('sign in') || text.includes('submit')
-        })
-        return loginBtn ? true : false
+        const submit = document.querySelector('input[type="submit"][name="submit"]')
+        if (submit) {
+          ;(submit as HTMLElement).click()
+          return true
+        }
+        const button = Array.from(document.querySelectorAll('button')).find((btn) =>
+          (btn.textContent || '').toLowerCase().includes('submit')
+        )
+        if (button instanceof HTMLButtonElement) {
+          button.click()
+          return true
+        }
+        return false
       })
 
       if (!loginButton) {
@@ -152,8 +194,6 @@ export class TexasScraper extends BaseScraper {
         }
       }
 
-      // Click login button
-      await page.click('button[type="submit"], input[type="submit"]')
       this.log('info', 'Login button clicked, waiting for navigation')
 
       // Wait for navigation after login
@@ -169,12 +209,14 @@ export class TexasScraper extends BaseScraper {
           bodyText.includes('invalid password') ||
           bodyText.includes('incorrect username') ||
           bodyText.includes('incorrect password') ||
+          bodyText.includes('invalid user id') ||
+          bodyText.includes('invalid password') ||
           bodyText.includes('login failed')
         ) {
           return false
         }
         // If we still see login form, probably failed
-        if (document.querySelector('input[type="password"]')) {
+        if (document.querySelector('input[name="client_id"]')) {
           return false
         }
         return true
@@ -187,7 +229,8 @@ export class TexasScraper extends BaseScraper {
       } else {
         return {
           success: false,
-          error: 'Login failed - invalid credentials or portal change'
+          error:
+            'Login failed - invalid credentials or portal change. Ensure TX_UCC_USERNAME is the SOSDirect USER ID (client ID), not an email.'
         }
       }
     } catch (error) {
@@ -259,10 +302,16 @@ export class TexasScraper extends BaseScraper {
    */
   private async performSearch(companyName: string): Promise<ScraperResult> {
     let page: Page | null = null
+    let result: ScraperResult | null = null
+    const finalize = (next: ScraperResult): ScraperResult => {
+      result = next
+      return next
+    }
 
     try {
       const browser = await this.getBrowser()
       page = await browser.newPage()
+      this.lastPage = page
 
       this.log('info', 'Browser page created', { companyName })
 
@@ -272,49 +321,35 @@ export class TexasScraper extends BaseScraper {
       )
       await page.setViewport({ width: 1920, height: 1080 })
 
-      // Navigate to main UCC page first
-      this.log('info', 'Navigating to TX UCC portal', { companyName, baseUrl: this.config.baseUrl })
-      await page.goto(this.config.baseUrl, {
-        waitUntil: 'networkidle2',
-        timeout: this.config.timeout
-      })
-
-      // Check for login requirement
-      const requiresLogin = await page.evaluate(() => {
-        if (document.querySelector('input[type="password"]')) {
-          return true
-        }
-        const bodyText = document.body.innerText.toLowerCase()
-        const mentionsSignIn = bodyText.includes('sign in') || bodyText.includes('log in')
-        return mentionsSignIn && bodyText.includes('password')
-      })
-
-      if (requiresLogin) {
-        this.log('info', 'Texas UCC portal requires authentication', { companyName })
-
-        // Attempt authentication
+      // Authenticate against SOSDirect (required for TX UCC searches)
+      if (!this.isAuthenticated) {
+        this.log('info', 'Texas UCC portal requires SOSDirect authentication', { companyName })
         const authResult = await this.authenticate(page)
 
         if (!authResult.success) {
           this.log('error', 'Authentication failed', { error: authResult.error })
-          return {
+          return finalize({
             success: false,
             error:
               authResult.error ||
-              'Texas UCC portal requires SOS Portal account login. Please configure TX_UCC_USERNAME and TX_UCC_PASSWORD environment variables.',
-            searchUrl: this.config.baseUrl,
+              'Texas UCC portal requires SOSDirect account login. Configure TX_UCC_USERNAME and TX_UCC_PASSWORD.',
+            searchUrl: page.url(),
             timestamp: new Date().toISOString()
-          }
+          })
         }
-
-        // After successful authentication, navigate back to UCC page
-        this.log('info', 'Authentication successful, navigating to UCC search')
-        await page.goto(this.config.baseUrl, {
-          waitUntil: 'networkidle2',
-          timeout: this.config.timeout
-        })
-        await this.sleep(2000)
       }
+
+      // Navigate to UCC home once authenticated
+      const uccHomeUrl = 'https://direct.sos.state.tx.us/home/home-ucc.asp'
+      this.log('info', 'Navigating to TX SOSDirect UCC home', {
+        companyName,
+        uccHomeUrl
+      })
+      await page.goto(uccHomeUrl, {
+        waitUntil: 'networkidle2',
+        timeout: this.config.timeout
+      })
+      await this.sleep(2000)
 
       // Look for search form or search link
       const searchFormFound = await page.evaluate(() => {
@@ -329,12 +364,12 @@ export class TexasScraper extends BaseScraper {
         // Try to find and click search link
         const searchLinkClicked = await page.evaluate(() => {
           const links = Array.from(document.querySelectorAll('a'))
-          const searchLink = links.find(
-            (link) =>
-              link.textContent?.toLowerCase().includes('search') ||
-              link.textContent?.toLowerCase().includes('ucc search')
-          )
-          if (searchLink) {
+          const searchLink = links.find((link) => {
+            const text = link.textContent?.toLowerCase() || ''
+            const href = link.getAttribute('href')?.toLowerCase() || ''
+            return (text.includes('search') && text.includes('ucc')) || href.includes('ucc')
+          })
+          if (searchLink instanceof HTMLElement) {
             searchLink.click()
             return true
           }
@@ -371,15 +406,14 @@ export class TexasScraper extends BaseScraper {
 
       if (!formFilled) {
         const portalNotice =
-          'Texas UCC searches now run inside the SOS Portal. Create an SOS Portal account and search there.'
+          'Unable to locate SOSDirect UCC search form after login. The portal layout may have changed, or credentials may be invalid.'
         this.log('warn', portalNotice, { companyName })
-        return {
-          success: true,
-          filings: [],
+        return finalize({
+          success: false,
+          error: portalNotice,
           searchUrl: page.url(),
-          timestamp: new Date().toISOString(),
-          parsingErrors: [portalNotice]
-        }
+          timestamp: new Date().toISOString()
+        })
       }
 
       // Submit the form
@@ -413,12 +447,12 @@ export class TexasScraper extends BaseScraper {
 
       if (hasCaptcha) {
         this.log('error', 'CAPTCHA detected', { companyName })
-        return {
+        return finalize({
           success: false,
           error: 'CAPTCHA detected - manual intervention required',
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       // Initialize pagination handler
@@ -597,20 +631,23 @@ export class TexasScraper extends BaseScraper {
         errorCount: validationErrors.length
       })
 
-      return {
+      return finalize({
         success: true,
         filings: validatedFilings,
         searchUrl: page.url(),
         timestamp: new Date().toISOString(),
         parsingErrors: validationErrors.length > 0 ? validationErrors : undefined
-      }
+      })
     } finally {
       if (page) {
-        await page.close().catch((err) => {
-          this.log('warn', 'Error closing page', {
-            error: err instanceof Error ? err.message : String(err)
+        const keepPage = this.keepPageOpenOnFailure && result && !result.success
+        if (!keepPage) {
+          await page.close().catch((err) => {
+            this.log('warn', 'Error closing page', {
+              error: err instanceof Error ? err.message : String(err)
+            })
           })
-        })
+        }
       }
     }
   }
@@ -622,6 +659,6 @@ export class TexasScraper extends BaseScraper {
    * This URL directs to the main UCC page where users must authenticate.
    */
   getManualSearchUrl(companyName: string): string {
-    return `${this.config.baseUrl}#search=${encodeURIComponent(companyName)}`
+    return `https://direct.sos.state.tx.us/home/home-ucc.asp#search=${encodeURIComponent(companyName)}`
   }
 }

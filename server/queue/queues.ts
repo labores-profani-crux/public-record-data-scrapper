@@ -1,4 +1,6 @@
 import { Queue } from 'bullmq'
+import type { ResolvedDataTier } from '../middleware/dataTier'
+import type { UccProvider } from '../config/tieredIntegrations'
 import { redisConnection } from './connection'
 
 // Job data interfaces
@@ -7,16 +9,20 @@ export interface IngestionJobData {
   startDate?: string
   endDate?: string
   batchSize?: number
+  dataTier?: ResolvedDataTier
+  uccProvider?: UccProvider
 }
 
 export interface EnrichmentJobData {
   prospectIds: string[]
   force?: boolean
+  dataTier?: ResolvedDataTier
 }
 
 export interface HealthScoreJobData {
   portfolioCompanyId?: string
   batchSize?: number
+  dataTier?: ResolvedDataTier
 }
 
 // Queue instances
@@ -82,6 +88,6 @@ export function getHealthScoreQueue(): Queue<HealthScoreJobData> {
 
 export async function closeQueues(): Promise<void> {
   const queues = [ingestionQueue, enrichmentQueue, healthScoreQueue]
-  await Promise.all(queues.map(q => q?.close()))
+  await Promise.all(queues.map((q) => q?.close()))
   console.log('✓ Job queues closed')
 }

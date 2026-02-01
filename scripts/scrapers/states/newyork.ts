@@ -12,18 +12,19 @@ import { NYUCCPortalScraper } from '../../../src/lib/scrapers/NYUCCPortalScraper
 export class NewYorkScraper extends BaseScraper {
   private nyPortalScraper: NYUCCPortalScraper
 
-  constructor() {
+  constructor(options: { headless?: boolean; keepPageOpenOnFailure?: boolean } = {}) {
     super({
       state: 'NY',
-      baseUrl: 'https://appext20.dos.ny.gov/pls/ucc_public/web_search.main_frame',
+      baseUrl: 'https://appext20.dos.ny.gov/pls/ucc_public/web_search.inhouse_search',
       rateLimit: 5, // 5 requests per minute
       timeout: 30000,
       retryAttempts: 2
     })
 
     this.nyPortalScraper = new NYUCCPortalScraper({
-      headless: true,
-      timeout: 30000
+      headless: options.headless ?? true,
+      timeout: 30000,
+      keepPageOpenOnFailure: options.keepPageOpenOnFailure ?? false
     })
   }
 
@@ -133,11 +134,22 @@ export class NewYorkScraper extends BaseScraper {
     }
   }
 
+  async captureDiagnostics(
+    outputDir: string,
+    baseName: string
+  ): Promise<{ screenshotPath?: string; htmlPath?: string }> {
+    return this.nyPortalScraper.captureDiagnostics(outputDir, baseName)
+  }
+
+  async closeBrowser(): Promise<void> {
+    await this.nyPortalScraper.closeBrowser()
+  }
+
   /**
    * Get manual search URL for New York
    */
   getManualSearchUrl(companyName: string): string {
     const encoded = encodeURIComponent(companyName)
-    return `${this.config.baseUrl}?search=${encoded}`
+    return `https://appext20.dos.ny.gov/pls/ucc_public/web_search.inhouse_search?p_name=${encoded}`
   }
 }

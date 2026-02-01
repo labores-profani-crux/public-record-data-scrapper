@@ -22,6 +22,7 @@
     "test:scrapers:tx": "tsx scripts/scrapers/test-scrapers.ts TX",
     "test:scrapers:fl": "tsx scripts/scrapers/test-scrapers.ts FL",
     "test:scrapers:ca": "tsx scripts/scrapers/test-scrapers.ts CA",
+    "test:scrapers:ny": "tsx scripts/scrapers/test-scrapers.ts NY",
     "test:scrapers:headed": "tsx scripts/scrapers/test-scrapers.ts --headed",
     "postinstall": "node ./scripts/ensure-main-branch.mjs",
     "scrape": "tsx scripts/cli-scraper.ts",

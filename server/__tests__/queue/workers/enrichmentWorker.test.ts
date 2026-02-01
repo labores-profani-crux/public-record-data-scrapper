@@ -192,9 +192,9 @@ describeConditional('Enrichment Worker', () => {
       await processPromise
 
       expect(mocks.mockEnrichProspect).toHaveBeenCalledTimes(3)
-      expect(mocks.mockEnrichProspect).toHaveBeenCalledWith('id-1')
-      expect(mocks.mockEnrichProspect).toHaveBeenCalledWith('id-2')
-      expect(mocks.mockEnrichProspect).toHaveBeenCalledWith('id-3')
+      expect(mocks.mockEnrichProspect).toHaveBeenCalledWith('id-1', 'free-tier')
+      expect(mocks.mockEnrichProspect).toHaveBeenCalledWith('id-2', 'free-tier')
+      expect(mocks.mockEnrichProspect).toHaveBeenCalledWith('id-3', 'free-tier')
     })
 
     it('should log progress for each enriched prospect', async () => {

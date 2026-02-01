@@ -7,13 +7,18 @@
 
 import { BaseScraper, ScraperResult } from '../base-scraper'
 import puppeteer, { Browser, Page } from 'puppeteer'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import type { Frame } from 'puppeteer'
 import { PaginationHandler } from '../pagination-handler'
 
 export class CaliforniaScraper extends BaseScraper {
   private browser: Browser | null = null
+  private lastPage: Page | null = null
+  private headless: boolean
+  private keepPageOpenOnFailure: boolean
 
-  constructor() {
+  constructor(options: { headless?: boolean; keepPageOpenOnFailure?: boolean } = {}) {
     super({
       state: 'CA',
       baseUrl: 'https://bizfileonline.sos.ca.gov/search/ucc',
@@ -21,6 +26,8 @@ export class CaliforniaScraper extends BaseScraper {
       timeout: 45000, // Increased timeout for CA SOS portal
       retryAttempts: 2
     })
+    this.headless = options.headless ?? true
+    this.keepPageOpenOnFailure = options.keepPageOpenOnFailure ?? false
   }
 
   /**
@@ -29,7 +36,7 @@ export class CaliforniaScraper extends BaseScraper {
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: true,
+        headless: this.headless,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -50,6 +57,50 @@ export class CaliforniaScraper extends BaseScraper {
     if (this.browser) {
       await this.browser.close()
       this.browser = null
+      this.lastPage = null
+    }
+  }
+
+  async captureDiagnostics(
+    outputDir: string,
+    baseName: string
+  ): Promise<{ screenshotPath?: string; htmlPath?: string }> {
+    if (!this.lastPage || this.lastPage.isClosed()) {
+      return {}
+    }
+
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true })
+    }
+
+    const screenshotPath = join(outputDir, `${baseName}.png`)
+    const htmlPath = join(outputDir, `${baseName}.html`)
+
+    let savedScreenshot = false
+    let savedHtml = false
+
+    try {
+      await this.lastPage.screenshot({ path: screenshotPath, fullPage: true })
+      savedScreenshot = true
+    } catch (error) {
+      this.log('warn', 'Failed to capture screenshot', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    try {
+      const html = await this.lastPage.content()
+      writeFileSync(htmlPath, html)
+      savedHtml = true
+    } catch (error) {
+      this.log('warn', 'Failed to capture HTML snapshot', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    return {
+      screenshotPath: savedScreenshot ? screenshotPath : undefined,
+      htmlPath: savedHtml ? htmlPath : undefined
     }
   }
 
@@ -111,10 +162,16 @@ export class CaliforniaScraper extends BaseScraper {
    */
   private async performSearch(companyName: string, searchUrl: string): Promise<ScraperResult> {
     let page: Page | null = null
+    let result: ScraperResult | null = null
+    const finalize = (next: ScraperResult): ScraperResult => {
+      result = next
+      return next
+    }
 
     try {
       const browser = await this.getBrowser()
       page = await browser.newPage()
+      this.lastPage = page
 
       this.log('info', 'Browser page created', { companyName })
 
@@ -134,6 +191,34 @@ export class CaliforniaScraper extends BaseScraper {
       // Wait for page to load
       await this.sleep(2000)
 
+      const isWafBlocked = async (): Promise<boolean> => {
+        try {
+          return await page.evaluate(() => {
+            const bodyText = document.body.innerText.toLowerCase()
+            return (
+              bodyText.includes('incapsula') ||
+              bodyText.includes('request unsuccessful') ||
+              bodyText.includes('access denied') ||
+              document.querySelector('iframe[src*="Incapsula_Resource" i]') !== null
+            )
+          })
+        } catch {
+          return false
+        }
+      }
+
+      if (await isWafBlocked()) {
+        const errorMessage =
+          'California UCC portal blocked by anti-bot protection (Incapsula/Imperva).'
+        this.log('error', errorMessage, { companyName })
+        return finalize({
+          success: false,
+          error: errorMessage,
+          searchUrl: page.url(),
+          timestamp: new Date().toISOString()
+        })
+      }
+
       // Check for CAPTCHA early
       const hasCaptcha = await page.evaluate(() => {
         return (
@@ -146,12 +231,12 @@ export class CaliforniaScraper extends BaseScraper {
 
       if (hasCaptcha) {
         this.log('error', 'CAPTCHA detected', { companyName })
-        return {
+        return finalize({
           success: false,
           error: 'CAPTCHA detected - manual intervention required',
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       // Check if login/account is required
@@ -289,19 +374,30 @@ export class CaliforniaScraper extends BaseScraper {
             timeout: this.config.timeout
           })
           await this.sleep(2000)
+          if (await isWafBlocked()) {
+            const errorMessage =
+              'California UCC portal blocked by anti-bot protection (Incapsula/Imperva).'
+            this.log('error', errorMessage, { companyName })
+            return finalize({
+              success: false,
+              error: errorMessage,
+              searchUrl: page.url(),
+              timestamp: new Date().toISOString()
+            })
+          }
           searchFormFilled = await fillSearchForm()
         }
       }
 
       if (!searchFormFilled && !usingPreloadedResults) {
         this.log('warn', 'Could not find debtor name search field', { companyName })
-        return {
+        return finalize({
           success: false,
           error:
             'Unable to locate debtor name search field on California UCC portal. Portal structure may have changed or requires login.',
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       if (searchFormFilled) {
@@ -336,12 +432,12 @@ export class CaliforniaScraper extends BaseScraper {
 
         if (!formSubmitted) {
           this.log('warn', 'Could not submit search form', { companyName })
-          return {
+          return finalize({
             success: false,
             error: 'Unable to submit search form on California UCC portal.',
             searchUrl: page.url(),
             timestamp: new Date().toISOString()
-          }
+          })
         }
 
         // Wait for results to load
@@ -365,12 +461,12 @@ export class CaliforniaScraper extends BaseScraper {
 
       if (noResults) {
         this.log('info', 'No UCC filings found', { companyName })
-        return {
+        return finalize({
           success: true,
           filings: [],
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       // Initialize pagination handler
@@ -600,21 +696,24 @@ export class CaliforniaScraper extends BaseScraper {
         errorCount: validationErrors.length
       })
 
-      return {
+      return finalize({
         success: true,
         filings: validatedFilings,
         searchUrl: page.url(),
         timestamp: new Date().toISOString(),
         parsingErrors: validationErrors.length > 0 ? validationErrors : undefined
-      }
+      })
     } finally {
       // Cleanup page in all cases
       if (page) {
-        await page.close().catch((err) => {
-          this.log('warn', 'Error closing page', {
-            error: err instanceof Error ? err.message : String(err)
+        const keepPage = this.keepPageOpenOnFailure && result && !result.success
+        if (!keepPage) {
+          await page.close().catch((err) => {
+            this.log('warn', 'Error closing page', {
+              error: err instanceof Error ? err.message : String(err)
+            })
           })
-        })
+        }
       }
     }
   }

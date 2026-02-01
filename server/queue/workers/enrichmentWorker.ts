@@ -14,7 +14,7 @@ type EnrichmentBatchSummary = {
 }
 
 async function processEnrichment(job: Job<EnrichmentJobData>): Promise<EnrichmentBatchSummary> {
-  const { prospectIds, force = false } = job.data
+  const { prospectIds, force = false, dataTier } = job.data
   const enrichmentService = new EnrichmentService()
 
   await job.updateProgress(0)
@@ -32,7 +32,7 @@ async function processEnrichment(job: Job<EnrichmentJobData>): Promise<Enrichmen
     for (const prospectId of prospectIds) {
       try {
         // Enrich individual prospect
-        const result = await enrichmentService.enrichProspect(prospectId)
+        const result = await enrichmentService.enrichProspect(prospectId, dataTier ?? 'free-tier')
         results.push({ prospectId, success: true, result })
         completed++
 

@@ -14,6 +14,8 @@
  * 4. Handle CAPTCHAs if present
  */
 
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import type { UCCFiling } from '../types'
 
 export interface ScraperConfig {
@@ -21,6 +23,7 @@ export interface ScraperConfig {
   timeout: number // milliseconds
   userAgent?: string
   proxyUrl?: string
+  keepPageOpenOnFailure?: boolean
 }
 
 export interface ScraperResult {
@@ -52,13 +55,16 @@ export interface ScraperResult {
  */
 export class NYUCCPortalScraper {
   private config: ScraperConfig
+  private lastBrowser: import('playwright').Browser | null = null
+  private lastPage: import('playwright').Page | null = null
 
   constructor(config: Partial<ScraperConfig> = {}) {
     this.config = {
       headless: config.headless ?? true,
       timeout: config.timeout ?? 30000,
       userAgent: config.userAgent,
-      proxyUrl: config.proxyUrl
+      proxyUrl: config.proxyUrl,
+      keepPageOpenOnFailure: config.keepPageOpenOnFailure ?? false
     }
   }
 
@@ -69,6 +75,8 @@ export class NYUCCPortalScraper {
     const startTime = Date.now()
     const filings: UCCFiling[] = []
     const errors: string[] = []
+    let success = false
+    let browser: import('playwright').Browser | null = null
 
     try {
       // Lazy load playwright only when needed
@@ -78,10 +86,12 @@ export class NYUCCPortalScraper {
       }
 
       const { chromium } = playwright
-      const browser = await chromium.launch({
+      browser = await chromium.launch({
         headless: this.config.headless,
         proxy: this.config.proxyUrl ? { server: this.config.proxyUrl } : undefined
       })
+
+      this.lastBrowser = browser
 
       const context = await browser.newContext({
         userAgent:
@@ -89,17 +99,31 @@ export class NYUCCPortalScraper {
       })
 
       const page = await context.newPage()
+      this.lastPage = page
       page.setDefaultTimeout(this.config.timeout)
 
-      try {
-        // Navigate to search page
-        await page.goto('https://appext20.dos.ny.gov/pls/ucc_public/web_search.main_frame')
+      // Navigate to the NYS Standard Debtor Search form
+      await page.goto('https://appext20.dos.ny.gov/pls/ucc_public/web_search.inhouse_search')
 
+      const pageSnapshot = await page.evaluate(() => ({
+        title: document.title || '',
+        bodyText: document.body?.innerText || ''
+      }))
+
+      const snapshotText = pageSnapshot.bodyText.toLowerCase()
+      const portalUnavailable =
+        pageSnapshot.title.toLowerCase().includes('page unavailable') ||
+        snapshotText.includes('application is currently offline') ||
+        snapshotText.includes('operation has timed out')
+
+      if (portalUnavailable) {
+        errors.push('NY UCC portal appears to be offline or unavailable.')
+      } else {
         // Wait for search form
-        await page.waitForSelector('input[name="p_debtor_name"]', { timeout: this.config.timeout })
+        await page.waitForSelector('input[name="p_name"]', { timeout: this.config.timeout })
 
         // Fill in debtor name
-        await page.fill('input[name="p_debtor_name"]', debtorName)
+        await page.fill('input[name="p_name"]', debtorName)
 
         // Submit search
         await page.click('input[type="submit"]')
@@ -107,94 +131,140 @@ export class NYUCCPortalScraper {
         // Wait for results
         await page.waitForLoadState('networkidle')
 
-        // Check for "no results" message
-        const noResults = await page.locator('text=No records found').count()
-        if (noResults > 0) {
-          return {
-            success: true,
-            filings: [],
-            errors: [],
-            metadata: {
-              searchCriteria: { debtorName },
-              resultsCount: 0,
-              scrapedCount: 0,
-              timestamp: new Date().toISOString(),
-              processingTime: Date.now() - startTime
+        const parsedFilings = await page.evaluate(() => {
+          const results: Array<{
+            filingNumber: string
+            filingDate: string
+            lapseDate: string
+            filingType: string
+            debtorName: string
+            securedParty: string
+          }> = []
+
+          const groupTables = Array.from(
+            document.querySelectorAll('table[border="1"][width="98%"]')
+          )
+
+          for (const group of groupTables) {
+            const innerTables = Array.from(group.querySelectorAll('table'))
+            if (innerTables.length < 2) {
+              continue
             }
-          }
-        }
 
-        // Extract filings from results table
-        const rows = await page.locator('table.results tr').all()
+            const infoTable = innerTables[0]
+            const filingTable = innerTables[1]
 
-        for (let i = 1; i < rows.length; i++) {
-          // Skip header row
-          const row = rows[i]
+            let debtorName = ''
+            let securedParty = ''
 
-          try {
-            const cells = await row.locator('td').all()
-
-            if (cells.length >= 6) {
-              // Extract data from cells
-              // NOTE: Cell positions may vary - adjust based on actual portal structure
-              const filingNumber = await cells[0].textContent()
-              const filingDate = await cells[1].textContent()
-              const debtorName = await cells[2].textContent()
-              const securedParty = await cells[3].textContent()
-              const filingType = await cells[4].textContent()
-              const status = await cells[5].textContent()
-
-              // Parse and validate data
-              if (filingNumber && filingDate && debtorName && securedParty) {
-                const filing: UCCFiling = {
-                  id: `ny-${filingNumber.trim()}`,
-                  filingDate: this.parseDate(filingDate.trim()),
-                  debtorName: debtorName.trim(),
-                  securedParty: securedParty.trim(),
-                  state: 'NY',
-                  status: this.parseStatus(status?.trim() || ''),
-                  filingType: filingType?.includes('UCC-3') ? 'UCC-3' : 'UCC-1'
-                }
-
-                filings.push(filing)
+            for (const row of Array.from(infoTable.querySelectorAll('tr'))) {
+              const cells = Array.from(row.querySelectorAll('td'))
+              if (cells.length < 3) {
+                continue
+              }
+              const label = (cells[1]?.textContent || '').replace(/\s+/g, ' ').trim()
+              const value = (cells[2]?.textContent || '').replace(/\s+/g, ' ').trim()
+              if (!value) {
+                continue
+              }
+              if (label.toLowerCase().includes('debtor names') && !debtorName) {
+                debtorName = value
+              }
+              if (label.toLowerCase().includes('secured party names') && !securedParty) {
+                securedParty = value
               }
             }
-          } catch (error) {
-            errors.push(
-              `Error parsing row ${i}: ${error instanceof Error ? error.message : 'Unknown error'}`
-            )
+
+            const rows = Array.from(filingTable.querySelectorAll('tr'))
+            for (const row of rows.slice(1)) {
+              const cells = Array.from(row.querySelectorAll('td'))
+              if (cells.length < 4) {
+                continue
+              }
+              const filingNumber = (cells[0]?.textContent || '').replace(/\s+/g, ' ').trim()
+              const filingDate = (cells[1]?.textContent || '').replace(/\s+/g, ' ').trim()
+              const lapseDate = (cells[2]?.textContent || '').replace(/\s+/g, ' ').trim()
+              const filingType = (cells[3]?.textContent || '').replace(/\s+/g, ' ').trim()
+
+              if (!filingNumber || !filingDate) {
+                continue
+              }
+
+              results.push({
+                filingNumber,
+                filingDate,
+                lapseDate,
+                filingType,
+                debtorName,
+                securedParty
+              })
+            }
+          }
+
+          return results
+        })
+
+        if (parsedFilings.length === 0) {
+          const noResults = await page.locator('text=/No records found/i').count()
+          if (noResults === 0) {
+            errors.push('NY results page did not contain expected filing tables.')
+          }
+        } else {
+          const today = new Date()
+          for (const filing of parsedFilings) {
+            const normalizedType = filing.filingType.toLowerCase()
+            const isUcc3 =
+              normalizedType.includes('amendment') ||
+              normalizedType.includes('continuation') ||
+              normalizedType.includes('assignment') ||
+              normalizedType.includes('termination') ||
+              normalizedType.includes('release') ||
+              normalizedType.includes('correction')
+            const filingType =
+              normalizedType.includes('financing statement') && !isUcc3 ? 'UCC-1' : 'UCC-3'
+            const lapse = this.parseDate(filing.lapseDate)
+            const lapseDate = new Date(lapse)
+            const status = Number.isNaN(lapseDate.getTime())
+              ? 'active'
+              : lapseDate < today
+                ? 'lapsed'
+                : 'active'
+
+            filings.push({
+              id: `ny-${filing.filingNumber}`,
+              filingDate: this.parseDate(filing.filingDate),
+              debtorName: filing.debtorName || debtorName,
+              securedParty: filing.securedParty,
+              state: 'NY',
+              status,
+              filingType
+            })
           }
         }
-      } finally {
-        await browser.close()
       }
 
-      return {
-        success: errors.length === 0,
-        filings,
-        errors,
-        metadata: {
-          searchCriteria: { debtorName },
-          resultsCount: filings.length,
-          scrapedCount: filings.length,
-          timestamp: new Date().toISOString(),
-          processingTime: Date.now() - startTime
-        }
-      }
+      success = errors.length === 0
     } catch (error) {
       errors.push(`Scraper error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      success = false
+    } finally {
+      if (browser && (!this.config.keepPageOpenOnFailure || success)) {
+        await browser.close()
+        this.lastBrowser = null
+        this.lastPage = null
+      }
+    }
 
-      return {
-        success: false,
-        filings,
-        errors,
-        metadata: {
-          searchCriteria: { debtorName },
-          resultsCount: 0,
-          scrapedCount: filings.length,
-          timestamp: new Date().toISOString(),
-          processingTime: Date.now() - startTime
-        }
+    return {
+      success,
+      filings,
+      errors,
+      metadata: {
+        searchCriteria: { debtorName },
+        resultsCount: filings.length,
+        scrapedCount: filings.length,
+        timestamp: new Date().toISOString(),
+        processingTime: Date.now() - startTime
       }
     }
   }
@@ -206,6 +276,8 @@ export class NYUCCPortalScraper {
     const startTime = Date.now()
     const filings: UCCFiling[] = []
     const errors: string[] = []
+    let success = false
+    let browser: import('playwright').Browser | null = null
 
     try {
       const playwright = await this.loadPlaywright()
@@ -214,48 +286,42 @@ export class NYUCCPortalScraper {
       }
 
       const { chromium } = playwright
-      const browser = await chromium.launch({ headless: this.config.headless })
+      browser = await chromium.launch({ headless: this.config.headless })
+      this.lastBrowser = browser
       const page = await browser.newPage()
+      this.lastPage = page
 
-      try {
-        await page.goto('https://appext20.dos.ny.gov/pls/ucc_public/web_search.main_frame')
-        await page.fill('input[name="p_filing_number"]', filingNumber)
-        await page.click('input[type="submit"]')
-        await page.waitForLoadState('networkidle')
+      await page.goto('https://appext20.dos.ny.gov/pls/ucc_public/web_search.main_frame')
+      await page.fill('input[name="p_filing_number"]', filingNumber)
+      await page.click('input[type="submit"]')
+      await page.waitForLoadState('networkidle')
 
-        // Extract filing details from detail page
-        // Implementation similar to searchByDebtorName
-        // ...
-      } finally {
-        await browser.close()
-      }
+      // Extract filing details from detail page
+      // Implementation similar to searchByDebtorName
+      // ...
 
-      return {
-        success: errors.length === 0,
-        filings,
-        errors,
-        metadata: {
-          searchCriteria: { filingNumber },
-          resultsCount: filings.length,
-          scrapedCount: filings.length,
-          timestamp: new Date().toISOString(),
-          processingTime: Date.now() - startTime
-        }
-      }
+      success = errors.length === 0
     } catch (error) {
       errors.push(`Scraper error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      success = false
+    } finally {
+      if (browser && (!this.config.keepPageOpenOnFailure || success)) {
+        await browser.close()
+        this.lastBrowser = null
+        this.lastPage = null
+      }
+    }
 
-      return {
-        success: false,
-        filings,
-        errors,
-        metadata: {
-          searchCriteria: { filingNumber },
-          resultsCount: 0,
-          scrapedCount: 0,
-          timestamp: new Date().toISOString(),
-          processingTime: Date.now() - startTime
-        }
+    return {
+      success,
+      filings,
+      errors,
+      metadata: {
+        searchCriteria: { filingNumber },
+        resultsCount: filings.length,
+        scrapedCount: filings.length,
+        timestamp: new Date().toISOString(),
+        processingTime: Date.now() - startTime
       }
     }
   }
@@ -267,6 +333,7 @@ export class NYUCCPortalScraper {
     const startTime = Date.now()
     const filings: UCCFiling[] = []
     const errors: string[] = []
+    let success = false
 
     try {
       const playwright = await this.loadPlaywright()
@@ -278,32 +345,22 @@ export class NYUCCPortalScraper {
       // This would navigate to the appropriate search form
       // and filter for lapsed filings
 
-      return {
-        success: errors.length === 0,
-        filings,
-        errors,
-        metadata: {
-          searchCriteria: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
-          resultsCount: filings.length,
-          scrapedCount: filings.length,
-          timestamp: new Date().toISOString(),
-          processingTime: Date.now() - startTime
-        }
-      }
+      success = errors.length === 0
     } catch (error) {
       errors.push(`Scraper error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      success = false
+    }
 
-      return {
-        success: false,
-        filings,
-        errors,
-        metadata: {
-          searchCriteria: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
-          resultsCount: 0,
-          scrapedCount: 0,
-          timestamp: new Date().toISOString(),
-          processingTime: Date.now() - startTime
-        }
+    return {
+      success,
+      filings,
+      errors,
+      metadata: {
+        searchCriteria: { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+        resultsCount: filings.length,
+        scrapedCount: filings.length,
+        timestamp: new Date().toISOString(),
+        processingTime: Date.now() - startTime
       }
     }
   }
@@ -349,6 +406,53 @@ export class NYUCCPortalScraper {
       return await import('playwright')
     } catch {
       return null
+    }
+  }
+
+  async captureDiagnostics(
+    outputDir: string,
+    baseName: string
+  ): Promise<{ screenshotPath?: string; htmlPath?: string }> {
+    if (!this.lastPage || this.lastPage.isClosed()) {
+      return {}
+    }
+
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true })
+    }
+
+    const screenshotPath = join(outputDir, `${baseName}.png`)
+    const htmlPath = join(outputDir, `${baseName}.html`)
+
+    let savedScreenshot = false
+    let savedHtml = false
+
+    try {
+      await this.lastPage.screenshot({ path: screenshotPath, fullPage: true })
+      savedScreenshot = true
+    } catch {
+      // Ignore screenshot errors to avoid masking the primary failure
+    }
+
+    try {
+      const html = await this.lastPage.content()
+      writeFileSync(htmlPath, html)
+      savedHtml = true
+    } catch {
+      // Ignore HTML capture errors to avoid masking the primary failure
+    }
+
+    return {
+      screenshotPath: savedScreenshot ? screenshotPath : undefined,
+      htmlPath: savedHtml ? htmlPath : undefined
+    }
+  }
+
+  async closeBrowser(): Promise<void> {
+    if (this.lastBrowser) {
+      await this.lastBrowser.close()
+      this.lastBrowser = null
+      this.lastPage = null
     }
   }
 }

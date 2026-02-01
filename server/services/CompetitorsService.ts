@@ -8,6 +8,7 @@
  */
 
 import { database } from '../database/connection'
+import type { ResolvedDataTier } from '../middleware/dataTier'
 
 /**
  * Allowlist of valid columns for sorting to prevent SQL injection.
@@ -24,6 +25,13 @@ const ALLOWED_SORT_COLUMNS = [
 ] as const
 
 type AllowedSortColumn = (typeof ALLOWED_SORT_COLUMNS)[number]
+
+const COMPETITOR_TIER_LIMITS: Record<ResolvedDataTier, number> = {
+  'free-tier': 20,
+  'starter-tier': 100
+}
+
+const FREE_TIER_MIN_FILINGS = 3
 
 /**
  * Validates and sanitizes a sort column to prevent SQL injection.
@@ -118,10 +126,13 @@ export class CompetitorsService {
    * @param params - Query parameters for filtering and pagination
    * @returns Paginated list of competitors with total count
    */
-  async list(params: ListParams) {
+  async list(params: ListParams, dataTier: ResolvedDataTier = 'free-tier') {
     const { page, limit, state, sort_by, sort_order } = params
     const safeSortBy = validateSortColumn(sort_by)
-    const offset = (page - 1) * limit
+    const maxLimit = COMPETITOR_TIER_LIMITS[dataTier]
+    const effectiveLimit = Math.min(limit, maxLimit)
+    const minFilings = dataTier === 'free-tier' ? FREE_TIER_MIN_FILINGS : 1
+    const offset = (page - 1) * effectiveLimit
 
     // Build WHERE clause
     const conditions: string[] = []
@@ -135,6 +146,11 @@ export class CompetitorsService {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    const havingClause = minFilings > 1 ? `HAVING COUNT(*) >= $${paramCount}` : ''
+    if (minFilings > 1) {
+      values.push(minFilings)
+      paramCount++
+    }
 
     // Query competitors (aggregated from UCC filings) - safeSortBy is validated against allowlist
     const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
@@ -151,18 +167,24 @@ export class CompetitorsService {
       FROM ucc_filings
       ${whereClause}
       GROUP BY secured_party_normalized
+      ${havingClause}
       ORDER BY ${safeSortBy} ${safeSortOrder}
       LIMIT $${paramCount++} OFFSET $${paramCount++}
     `
-    values.push(limit, offset)
+    values.push(effectiveLimit, offset)
 
     const competitors = await database.query<Competitor>(query, values)
 
     // Get total count
     const countQuery = `
-      SELECT COUNT(DISTINCT secured_party_normalized) as count
-      FROM ucc_filings
-      ${whereClause}
+      SELECT COUNT(*) as count
+      FROM (
+        SELECT secured_party_normalized
+        FROM ucc_filings
+        ${whereClause}
+        GROUP BY secured_party_normalized
+        ${havingClause}
+      ) as grouped
     `
     const countResult = await database.query<{ count: string }>(countQuery, values.slice(0, -2))
     const total = parseInt(countResult[0]?.count || '0')
@@ -170,7 +192,7 @@ export class CompetitorsService {
     return {
       competitors,
       page,
-      limit,
+      limit: effectiveLimit,
       total
     }
   }

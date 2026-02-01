@@ -2,7 +2,9 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { validateRequest } from '../middleware/validateRequest'
 import { asyncHandler } from '../middleware/errorHandler'
+import { getResolvedDataTier } from '../middleware/dataTier'
 import { getIngestionQueue, getEnrichmentQueue, getHealthScoreQueue } from '../queue/queues'
+import { resolveUccProvider } from '../config/tieredIntegrations'
 
 const router = Router()
 
@@ -34,12 +36,18 @@ router.post(
   validateRequest({ body: triggerIngestionSchema }),
   asyncHandler(async (req, res) => {
     const ingestionQueue = getIngestionQueue()
-    const job = await ingestionQueue.add(`ingest-${req.body.state}`, req.body)
+    const dataTier = getResolvedDataTier(req)
+    const uccProvider = resolveUccProvider(dataTier)
+    const job = await ingestionQueue.add(`ingest-${req.body.state}`, {
+      ...req.body,
+      dataTier,
+      uccProvider
+    })
 
     res.status(201).json({
       jobId: job.id,
       queueName: 'ucc-ingestion',
-      data: req.body,
+      data: job.data,
       status: 'queued'
     })
   })
@@ -51,12 +59,13 @@ router.post(
   validateRequest({ body: triggerEnrichmentSchema }),
   asyncHandler(async (req, res) => {
     const enrichmentQueue = getEnrichmentQueue()
-    const job = await enrichmentQueue.add('enrich-batch', req.body)
+    const dataTier = getResolvedDataTier(req)
+    const job = await enrichmentQueue.add('enrich-batch', { ...req.body, dataTier })
 
     res.status(201).json({
       jobId: job.id,
       queueName: 'data-enrichment',
-      data: req.body,
+      data: job.data,
       status: 'queued'
     })
   })
@@ -68,12 +77,13 @@ router.post(
   validateRequest({ body: triggerHealthScoreSchema }),
   asyncHandler(async (req, res) => {
     const healthScoreQueue = getHealthScoreQueue()
-    const job = await healthScoreQueue.add('health-batch', req.body)
+    const dataTier = getResolvedDataTier(req)
+    const job = await healthScoreQueue.add('health-batch', { ...req.body, dataTier })
 
     res.status(201).json({
       jobId: job.id,
       queueName: 'health-scores',
-      data: req.body,
+      data: job.data,
       status: 'queued'
     })
   })
@@ -105,6 +115,7 @@ router.get(
           status: state,
           progress,
           data: job.data,
+          uccProvider: job.data?.uccProvider ?? null,
           returnvalue: job.returnvalue,
           failedReason: job.failedReason,
           processedOn: job.processedOn,

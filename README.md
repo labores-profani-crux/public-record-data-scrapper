@@ -143,6 +143,14 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
+## Data Tiering (OSS vs Paid)
+
+The UI Settings menu lets you choose `oss` or `paid`, which is forwarded to the API as
+`x-data-tier` (OSS/base vs paid/secondary). When `VITE_USE_MOCK_DATA=true`, the tier
+selection adjusts mock ranges (signals and revenue caps) so OSS outputs are smaller and
+paid outputs are broader. For server-side tier routing and tiered env vars, see
+`server/README.md`.
+
 ### Sharing Your Dev Server
 
 Share your local dev server with remote users via a public URL:

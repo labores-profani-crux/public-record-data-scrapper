@@ -24,6 +24,11 @@ const DATA_TIER_LABELS: Record<DataTier, { title: string; description: string }>
   }
 }
 
+const DATA_TIER_MOCK_SUMMARY: Record<DataTier, string> = {
+  oss: 'Mock caps: signals 0-3, revenue <= $2M, competitor filings <= 250.',
+  paid: 'Mock caps: signals 1-6, revenue <= $3M, competitor filings <= 500.'
+}
+
 export function SettingsMenu() {
   const { dataTier, setDataTier } = useDataTier()
 
@@ -75,6 +80,9 @@ export function SettingsMenu() {
           {isDemoMode
             ? 'Mock data is active. Tier selection will tune demo outputs.'
             : 'Tier selection is forwarded to API requests for routing.'}
+          {isDemoMode ? (
+            <div className="mt-1 text-[11px] text-white/50">{DATA_TIER_MOCK_SUMMARY[dataTier]}</div>
+          ) : null}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

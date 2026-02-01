@@ -2,13 +2,19 @@ import { Worker, Job } from 'bullmq'
 import { redisConnection } from '../connection'
 import { HealthScoreJobData } from '../queues'
 import { database } from '../../database/connection'
+import { listEnabledIntegrations } from '../../config/tieredIntegrations'
 
 async function processHealthScore(job: Job<HealthScoreJobData>): Promise<void> {
-  const { portfolioCompanyId, batchSize = 50 } = job.data
+  const { portfolioCompanyId, batchSize = 50, dataTier } = job.data
+  const resolvedTier = dataTier ?? 'free-tier'
+  const enabledIntegrations = listEnabledIntegrations(resolvedTier)
 
   await job.updateProgress(0)
 
-  console.log('[Health Score Worker] Starting health score calculation')
+  console.log(`[Health Score Worker] Starting health score calculation (${resolvedTier})`)
+  console.log(
+    `[Health Score Worker] Tier integrations: ${enabledIntegrations.length > 0 ? enabledIntegrations.join(', ') : 'none'}`
+  )
 
   try {
     // Get companies to process

@@ -18,11 +18,11 @@ cp .env.example .env
 
 ### 2. Add Texas Credentials
 
-Edit `.env` and add your Texas SOS Portal credentials:
+Edit `.env` and add your Texas SOS Portal credentials (the USER ID is the SOSDirect client ID, not an email):
 
 ```bash
 # Texas SOS Portal Credentials
-TX_UCC_USERNAME=your_actual_username
+TX_UCC_USERNAME=your_sosdirect_user_id
 TX_UCC_PASSWORD=your_actual_password
 ```
 
@@ -34,7 +34,7 @@ If you don't have an account yet:
 2. Click "Create Account" or "Register"
 3. Fill in required information
 4. Verify your email address
-5. Note your username and password
+5. Note your SOSDirect USER ID (client ID) and password
 
 ### 4. Test Authentication
 
@@ -45,9 +45,10 @@ npm run test:scrapers:tx
 ```
 
 You should see:
+
 ```
 Attempting to authenticate with Texas SOS Portal
-Username entered
+SOSDirect USER ID entered
 Password entered
 Login button clicked, waiting for navigation
 Successfully authenticated with Texas SOS Portal
@@ -140,12 +141,14 @@ export TX_UCC_PASSWORD="your_password"
 ### Error: "Login failed - invalid credentials or portal change"
 
 **Possible Causes**:
+
 1. **Wrong credentials**: Verify username/password are correct
 2. **Account locked**: Too many failed login attempts
 3. **Portal changed**: Texas updated their login page structure
 4. **Account expired**: Account needs renewal
 
 **Solutions**:
+
 - Try logging in manually at https://www.sos.state.tx.us/ucc/
 - Reset your password if needed
 - Contact Texas SOS if account is locked
@@ -156,6 +159,7 @@ export TX_UCC_PASSWORD="your_password"
 **Cause**: Texas SOS changed their login page HTML structure
 
 **Solution**:
+
 1. Open issue on GitHub with screenshot of current login page
 2. We'll update the selectors to match new structure
 3. As workaround, use manual searches temporarily
@@ -165,6 +169,7 @@ export TX_UCC_PASSWORD="your_password"
 **Cause**: Network slow or portal unresponsive
 
 **Solutions**:
+
 - Increase timeout in scraper config (default: 45s)
 - Check internet connection
 - Try again during off-peak hours
@@ -184,17 +189,20 @@ This will use TOTP (Time-based One-Time Password) for automated 2FA handling.
 ## State-Specific Notes
 
 ### Texas (TX)
+
 - ✅ **Authentication**: Required as of Sept 2025
 - ✅ **Implemented**: Full automation support
 - ⚠️ **Requirements**: Must create SOS Portal account
 - 📝 **Cost**: Account creation is free
 
 ### Florida (FL)
+
 - ✅ **Authentication**: Not required (as of Nov 2025)
 - ℹ️ **Portal**: floridaucc.com (privatized system)
 - 📝 **Note**: May add auth in future
 
 ### California (CA)
+
 - ✅ **Authentication**: Optional (free searches available)
 - ℹ️ **Portal**: bizfileonline.sos.ca.gov
 - 📝 **Note**: Basic searches work without login
@@ -223,6 +231,7 @@ npm run test:scrapers:tx
 ```
 
 Look for these log messages:
+
 - ✅ "Successfully authenticated with Texas SOS Portal"
 - ❌ "Authentication failed"
 - ⚠️ "Texas authentication credentials not configured"
@@ -234,6 +243,7 @@ Look for these log messages:
 For production deployment, set environment variables in your hosting platform:
 
 **AWS Lambda/EC2:**
+
 ```bash
 aws ssm put-parameter \
   --name "/app/tx-ucc-username" \
@@ -242,12 +252,14 @@ aws ssm put-parameter \
 ```
 
 **Docker:**
+
 ```dockerfile
 ENV TX_UCC_USERNAME=${TX_UCC_USERNAME}
 ENV TX_UCC_PASSWORD=${TX_UCC_PASSWORD}
 ```
 
 **GitHub Actions:**
+
 ```yaml
 env:
   TX_UCC_USERNAME: ${{ secrets.TX_UCC_USERNAME }}

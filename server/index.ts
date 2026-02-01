@@ -9,6 +9,7 @@ import { requestLogger } from './middleware/requestLogger'
 import { createRateLimiter, closeRateLimiterConnection } from './middleware/rateLimiter'
 import { authMiddleware } from './middleware/authMiddleware'
 import { httpsRedirect } from './middleware/httpsRedirect'
+import { dataTierRouter } from './middleware/dataTier'
 
 // Import routes
 import prospectsRouter from './routes/prospects'
@@ -55,6 +56,9 @@ export class Server {
 
     // Logging
     this.app.use(requestLogger)
+
+    // Data tier routing (OSS -> free-tier, paid -> starter-tier)
+    this.app.use(dataTierRouter)
 
     // Rate limiting (Redis-based in production, in-memory in development)
     this.app.use(createRateLimiter())

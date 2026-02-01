@@ -2,13 +2,21 @@ import { Worker, Job } from 'bullmq'
 import { redisConnection } from '../connection'
 import { IngestionJobData } from '../queues'
 import { database } from '../../database/connection'
+import { listEnabledIntegrations, resolveUccProvider } from '../../config/tieredIntegrations'
 
 async function processIngestion(job: Job<IngestionJobData>): Promise<void> {
-  const { state, startDate, endDate, batchSize = 1000 } = job.data
+  const { state, startDate, endDate, batchSize = 1000, dataTier } = job.data
+  const resolvedTier = dataTier ?? 'free-tier'
+  const resolvedProvider = job.data.uccProvider ?? resolveUccProvider(resolvedTier)
+  const enabledIntegrations = listEnabledIntegrations(resolvedTier)
 
   await job.updateProgress(0)
 
-  console.log(`[Ingestion Worker] Starting UCC ingestion for state: ${state}`)
+  console.log(`[Ingestion Worker] Starting UCC ingestion for state: ${state} (${resolvedTier})`)
+  console.log(`[Ingestion Worker] UCC provider: ${resolvedProvider}`)
+  console.log(
+    `[Ingestion Worker] Tier integrations: ${enabledIntegrations.length > 0 ? enabledIntegrations.join(', ') : 'none'}`
+  )
 
   try {
     // Phase 2 will implement actual scraping
@@ -37,7 +45,15 @@ async function processIngestion(job: Job<IngestionJobData>): Promise<void> {
         `ucc_${state.toLowerCase()}`,
         'success',
         mockFilingsCount,
-        JSON.stringify({ state, batchSize, startDate, endDate })
+        JSON.stringify({
+          state,
+          batchSize,
+          startDate,
+          endDate,
+          dataTier: resolvedTier,
+          uccProvider: resolvedProvider,
+          integrations: enabledIntegrations
+        })
       ]
     )
 
@@ -63,7 +79,7 @@ async function processIngestion(job: Job<IngestionJobData>): Promise<void> {
 }
 
 function simulateApiCall(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function createIngestionWorker() {

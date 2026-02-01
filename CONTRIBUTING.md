@@ -13,12 +13,14 @@ Thank you for your interest in contributing to the UCC-MCA Intelligence Platform
 ### Setup
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/ivi374forivi/public-record-data-scrapper.git
    cd public-record-data-scrapper
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
@@ -36,6 +38,12 @@ Thank you for your interest in contributing to the UCC-MCA Intelligence Platform
 - **Build**: `npm run build` - Creates a production build
 - **Preview**: `npm run preview` - Preview the production build locally
 - **Lint**: `npm run lint` - Run ESLint to check code quality
+
+### Data Tiering
+
+- The UI settings menu sets the `x-data-tier` header (`oss` or `paid`).
+- Server routing resolves tiers to `free-tier` or `starter-tier` and applies limits.
+- Tiered envs use the `FREE_TIER_*` / `STARTER_TIER_*` prefixes (see `server/README.md`).
 
 ### Code Style
 

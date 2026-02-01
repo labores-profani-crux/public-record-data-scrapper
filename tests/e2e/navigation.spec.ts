@@ -106,12 +106,9 @@ test.describe('Header', () => {
   test('should have theme toggle in header', async ({ page }) => {
     await page.goto('/')
 
-    // Look for theme toggle button
     const header = page.locator('header')
-    const buttons = header.getByRole('button')
-
-    // Should have at least 2 buttons (refresh and theme toggle)
-    await expect(buttons).toHaveCount(2)
+    const themeToggle = header.getByRole('button', { name: /toggle theme/i })
+    await expect(themeToggle).toBeVisible()
   })
 })
 

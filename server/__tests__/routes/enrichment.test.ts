@@ -238,7 +238,7 @@ describe('Enrichment API', () => {
       expect(response.body.force).toBe(true)
 
       // Verify service was called with force=true
-      expect(mockTriggerRefresh).toHaveBeenCalledWith(true)
+      expect(mockTriggerRefresh).toHaveBeenCalledWith(true, 'free-tier')
     })
 
     it('should default force to false', async () => {
@@ -257,7 +257,7 @@ describe('Enrichment API', () => {
       expect(response.body.force).toBe(false)
 
       // Verify service was called with force=false
-      expect(mockTriggerRefresh).toHaveBeenCalledWith(false)
+      expect(mockTriggerRefresh).toHaveBeenCalledWith(false, 'free-tier')
     })
   })
 

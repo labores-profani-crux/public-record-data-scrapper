@@ -1,7 +1,7 @@
 /**
  * Test Script for State UCC Scrapers
  *
- * Validates TX, FL, and CA scrapers against live portals with:
+ * Validates TX, FL, CA, and NY scrapers against live portals with:
  * - Screenshot capture on failures
  * - Detailed logging and reporting
  * - Configurable headless/headed mode
@@ -12,13 +12,16 @@
  *   npm run test:scrapers -- TX     # Test Texas only
  *   npm run test:scrapers -- FL     # Test Florida only
  *   npm run test:scrapers -- CA     # Test California only
+ *   npm run test:scrapers -- NY     # Test New York only
  *   npm run test:scrapers -- --headed  # Run in headed mode (see browser)
  */
 
 import { TexasScraper } from './states/texas'
 import { FloridaScraper } from './states/florida'
 import { CaliforniaScraper } from './states/california'
+import { NewYorkScraper } from './states/newyork'
 import type { BaseScraper, ScraperResult } from './base-scraper'
+import { hasTexasAuth } from './auth-config'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'node:url'
@@ -37,7 +40,10 @@ interface TestResult {
   success: boolean
   duration: number
   error?: string
+  skipped?: boolean
+  skipReason?: string
   screenshotPath?: string
+  domPath?: string
 }
 
 // Test cases for each state
@@ -72,6 +78,15 @@ const TEST_CASES: Record<string, TestCase[]> = {
       expectedMinResults: 0
     },
     { companyName: 'Sample Business Inc', description: 'Generic test name', expectedMinResults: 0 }
+  ],
+  NY: [
+    { companyName: 'IBM', description: 'New York-based tech company', expectedMinResults: 0 },
+    {
+      companyName: 'Consolidated Edison',
+      description: 'New York utility company',
+      expectedMinResults: 0
+    },
+    { companyName: 'ACME Corporation', description: 'Generic test name', expectedMinResults: 0 }
   ]
 }
 
@@ -93,13 +108,39 @@ class ScraperTestRunner {
   /**
    * Run all tests for a specific state
    */
-  async testState(state: 'TX' | 'FL' | 'CA'): Promise<void> {
+  async testState(state: 'TX' | 'FL' | 'CA' | 'NY'): Promise<void> {
     console.log(`\n${'='.repeat(60)}`)
     console.log(`Testing ${state} UCC Scraper`)
     console.log('='.repeat(60))
 
     const scraper = this.getScraper(state)
     const testCases = TEST_CASES[state]
+
+    if (state === 'TX' && !hasTexasAuth()) {
+      const skipReason = 'TX_UCC_USERNAME/TX_UCC_PASSWORD not set; skipping TX live portal tests.'
+      console.log(`⚠️  ${skipReason}`)
+
+      for (const testCase of testCases) {
+        const skippedResult: TestResult = {
+          state,
+          testCase,
+          result: {
+            success: false,
+            error: skipReason,
+            timestamp: new Date().toISOString()
+          },
+          success: false,
+          duration: 0,
+          error: skipReason,
+          skipped: true,
+          skipReason
+        }
+
+        this.results.push(skippedResult)
+      }
+
+      return
+    }
 
     for (let i = 0; i < testCases.length; i++) {
       const testCase = testCases[i]
@@ -162,6 +203,16 @@ class ScraperTestRunner {
         }
       }
 
+      if (!result.success) {
+        const artifacts = await this.captureDiagnostics(scraper, state, testCase)
+        if (artifacts.screenshotPath) {
+          result.screenshotPath = artifacts.screenshotPath
+        }
+        if (artifacts.domPath) {
+          result.domPath = artifacts.domPath
+        }
+      }
+
       this.results.push(result)
 
       // Rate limiting between tests
@@ -180,18 +231,62 @@ class ScraperTestRunner {
   /**
    * Get scraper instance for a state
    */
-  private getScraper(
-    state: 'TX' | 'FL' | 'CA'
-  ): BaseScraper & { closeBrowser?: () => Promise<void> } {
+  private getScraper(state: 'TX' | 'FL' | 'CA' | 'NY'): BaseScraper & {
+    closeBrowser?: () => Promise<void>
+    captureDiagnostics?: (
+      outputDir: string,
+      baseName: string
+    ) => Promise<{ screenshotPath?: string; htmlPath?: string }>
+  } {
+    const options = { headless: !this.isHeaded, keepPageOpenOnFailure: true }
     switch (state) {
       case 'TX':
-        return new TexasScraper()
+        return new TexasScraper(options)
       case 'FL':
-        return new FloridaScraper()
+        return new FloridaScraper(options)
       case 'CA':
-        return new CaliforniaScraper()
+        return new CaliforniaScraper(options)
+      case 'NY':
+        return new NewYorkScraper(options)
       default:
         throw new Error(`Unknown state: ${state}`)
+    }
+  }
+
+  private slugify(value: string): string {
+    const slug = value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50)
+    return slug.length > 0 ? slug : 'unknown'
+  }
+
+  private async captureDiagnostics(
+    scraper: BaseScraper & {
+      captureDiagnostics?: (
+        outputDir: string,
+        baseName: string
+      ) => Promise<{ screenshotPath?: string; htmlPath?: string }>
+    },
+    state: string,
+    testCase: TestCase
+  ): Promise<{ screenshotPath?: string; domPath?: string }> {
+    if (!scraper.captureDiagnostics) {
+      return {}
+    }
+
+    const artifactsDir = join(this.resultsDir, 'artifacts')
+    if (!existsSync(artifactsDir)) {
+      mkdirSync(artifactsDir, { recursive: true })
+    }
+
+    const baseName = `${state}-${this.slugify(testCase.companyName)}`
+    const artifacts = await scraper.captureDiagnostics(artifactsDir, baseName)
+
+    return {
+      screenshotPath: artifacts.screenshotPath,
+      domPath: artifacts.htmlPath
     }
   }
 
@@ -214,24 +309,30 @@ class ScraperTestRunner {
 
     // Summary by state
     for (const [state, results] of Object.entries(byState)) {
-      const successful = results.filter((r) => r.success).length
-      const failed = results.filter((r) => !r.success).length
+      const completed = results.filter((r) => !r.skipped)
+      const successful = completed.filter((r) => r.success).length
+      const failed = completed.filter((r) => !r.success).length
+      const skipped = results.filter((r) => r.skipped).length
       const withResults = results.filter(
         (r) => r.result.filings && r.result.filings.length > 0
       ).length
-      const avgDuration = results.reduce((sum, r) => sum + r.duration, 0) / results.length
+      const avgDuration =
+        completed.length > 0
+          ? completed.reduce((sum, r) => sum + r.duration, 0) / completed.length
+          : 0
 
       console.log(`\n${state}:`)
       console.log(`  Total tests: ${results.length}`)
       console.log(
-        `  Successful: ${successful} (${((successful / results.length) * 100).toFixed(1)}%)`
+        `  Successful: ${successful} (${completed.length > 0 ? ((successful / completed.length) * 100).toFixed(1) : '0.0'}%)`
       )
       console.log(`  Failed: ${failed}`)
+      console.log(`  Skipped: ${skipped}`)
       console.log(`  Tests with results: ${withResults}`)
       console.log(`  Avg duration: ${avgDuration.toFixed(0)}ms`)
 
       // Show failures
-      const failures = results.filter((r) => !r.success)
+      const failures = results.filter((r) => !r.success && !r.skipped)
       if (failures.length > 0) {
         console.log(`  Failures:`)
         for (const failure of failures) {
@@ -242,13 +343,16 @@ class ScraperTestRunner {
 
     // Overall stats
     const totalTests = this.results.length
+    const totalCompleted = this.results.filter((r) => !r.skipped).length
     const totalSuccessful = this.results.filter((r) => r.success).length
-    const totalFailed = this.results.filter((r) => !r.success).length
+    const totalFailed = this.results.filter((r) => !r.success && !r.skipped).length
+    const totalSkipped = this.results.filter((r) => r.skipped).length
 
     console.log(`\n${'='.repeat(60)}`)
     console.log(
-      `Overall: ${totalSuccessful}/${totalTests} tests passed (${((totalSuccessful / totalTests) * 100).toFixed(1)}%)`
+      `Overall: ${totalSuccessful}/${totalCompleted} tests passed (${totalCompleted > 0 ? ((totalSuccessful / totalCompleted) * 100).toFixed(1) : '0.0'}%)`
     )
+    console.log(`Skipped: ${totalSkipped}`)
     console.log('='.repeat(60))
 
     // Write detailed JSON report
@@ -260,9 +364,11 @@ class ScraperTestRunner {
           timestamp: new Date().toISOString(),
           summary: {
             total: totalTests,
+            completed: totalCompleted,
             successful: totalSuccessful,
             failed: totalFailed,
-            successRate: totalSuccessful / totalTests
+            skipped: totalSkipped,
+            successRate: totalCompleted > 0 ? totalSuccessful / totalCompleted : 0
           },
           results: this.results
         },
@@ -284,7 +390,7 @@ class ScraperTestRunner {
  */
 async function main() {
   const args = process.argv.slice(2)
-  const stateArg = args.find((arg) => ['TX', 'FL', 'CA'].includes(arg.toUpperCase()))
+  const stateArg = args.find((arg) => ['TX', 'FL', 'CA', 'NY'].includes(arg.toUpperCase()))
   const isHeaded = args.includes('--headed')
 
   const runner = new ScraperTestRunner(isHeaded)
@@ -292,17 +398,18 @@ async function main() {
   console.log('State UCC Scraper Test Suite')
   console.log('============================')
   console.log(`Mode: ${isHeaded ? 'Headed (browser visible)' : 'Headless'}`)
-  console.log(`Testing: ${stateArg ? stateArg.toUpperCase() : 'All states (TX, FL, CA)'}`)
+  console.log(`Testing: ${stateArg ? stateArg.toUpperCase() : 'All states (TX, FL, CA, NY)'}`)
 
   try {
     if (stateArg) {
       // Test single state
-      await runner.testState(stateArg.toUpperCase() as 'TX' | 'FL' | 'CA')
+      await runner.testState(stateArg.toUpperCase() as 'TX' | 'FL' | 'CA' | 'NY')
     } else {
       // Test all states
       await runner.testState('TX')
       await runner.testState('FL')
       await runner.testState('CA')
+      await runner.testState('NY')
     }
 
     // Generate report

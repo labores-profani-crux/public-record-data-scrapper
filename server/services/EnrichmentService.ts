@@ -12,6 +12,8 @@
  */
 
 import { database } from '../database/connection'
+import type { ResolvedDataTier } from '../middleware/dataTier'
+import { listEnabledIntegrations } from '../config/tieredIntegrations'
 
 /**
  * Result of enriching a prospect with additional data.
@@ -86,7 +88,10 @@ export class EnrichmentService {
    * @returns Enrichment result with all gathered data
    * @throws {Error} If the prospect is not found
    */
-  async enrichProspect(prospectId: string): Promise<EnrichmentResult> {
+  async enrichProspect(
+    prospectId: string,
+    dataTier: ResolvedDataTier = 'free-tier'
+  ): Promise<EnrichmentResult> {
     // Get prospect details
     const prospect = await database.query('SELECT * FROM prospects WHERE id = $1', [prospectId])
 
@@ -116,7 +121,7 @@ export class EnrichmentService {
         ? prospectData.lien_amount * (4 + Math.random() * 2)
         : 0,
       industry_classification: prospectData.industry || 'unknown',
-      data_sources_used: ['mock-data']
+      data_sources_used: ['mock-data', dataTier, ...listEnabledIntegrations(dataTier)]
     }
 
     // Update prospect with enrichment data
@@ -169,13 +174,14 @@ export class EnrichmentService {
    * @returns Array of results indicating success/failure for each prospect
    */
   async enrichBatch(
-    prospectIds: string[]
+    prospectIds: string[],
+    dataTier: ResolvedDataTier = 'free-tier'
   ): Promise<Array<{ prospect_id: string; success: boolean; error?: string }>> {
     const results = []
 
     for (const prospectId of prospectIds) {
       try {
-        await this.enrichProspect(prospectId)
+        await this.enrichProspect(prospectId, dataTier)
         results.push({ prospect_id: prospectId, success: true })
       } catch (error) {
         results.push({
@@ -201,7 +207,7 @@ export class EnrichmentService {
    * @param force - If true, refresh all prospects regardless of staleness
    * @returns Summary of refresh operation results
    */
-  async triggerRefresh(force: boolean = false) {
+  async triggerRefresh(force: boolean = false, dataTier: ResolvedDataTier = 'free-tier') {
     // Get prospects that need refreshing
     const query = force
       ? 'SELECT id FROM prospects'
@@ -213,7 +219,7 @@ export class EnrichmentService {
     const prospects = await database.query<{ id: string }>(query)
 
     const prospectIds = prospects.map((p) => p.id)
-    const results = await this.enrichBatch(prospectIds)
+    const results = await this.enrichBatch(prospectIds, dataTier)
 
     return {
       queued: prospectIds.length,

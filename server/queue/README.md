@@ -23,14 +23,21 @@ server/queue/
 Processes state-by-state UCC filing ingestion from public records portals.
 
 **Job Data:**
+
 ```typescript
 {
   state: string           // 2-letter state code (e.g., "NY", "CA")
   startDate?: string      // Optional start date for date range
   endDate?: string        // Optional end date for date range
   batchSize?: number      // Records per batch (default: 1000)
+  dataTier?: 'free-tier' | 'starter-tier'
+  uccProvider?: 'csc' | 'ctcorp' | 'lexisnexis' | 'mock'
 }
 ```
+
+UCC provider selection is resolved per tier when the job is enqueued using
+`FREE_TIER_*` / `STARTER_TIER_*` credentials. The resolved `uccProvider` is
+stored with the job payload for debugging.
 
 **Schedule:** Daily at 2:00 AM for all configured states
 
@@ -43,10 +50,12 @@ Processes state-by-state UCC filing ingestion from public records portals.
 Enriches prospect data with external signals (growth indicators, health scores, etc.)
 
 **Job Data:**
+
 ```typescript
 {
   prospectIds: string[]   // Array of prospect UUIDs (max 100)
   force?: boolean         // Force re-enrichment of already enriched prospects
+  dataTier?: 'free-tier' | 'starter-tier'
 }
 ```
 
@@ -61,10 +70,12 @@ Enriches prospect data with external signals (growth indicators, health scores, 
 Calculates health scores for portfolio companies based on various factors.
 
 **Job Data:**
+
 ```typescript
 {
   portfolioCompanyId?: string   // Optional specific company ID
   batchSize?: number            // Companies per batch (default: 50)
+  dataTier?: 'free-tier' | 'starter-tier'
 }
 ```
 
@@ -104,6 +115,7 @@ npm run start:worker
 ### Trigger Jobs Manually
 
 **POST /api/jobs/ingestion**
+
 ```bash
 curl -X POST http://localhost:3000/api/jobs/ingestion \
   -H "Content-Type: application/json" \
@@ -114,6 +126,7 @@ curl -X POST http://localhost:3000/api/jobs/ingestion \
 ```
 
 **POST /api/jobs/enrichment**
+
 ```bash
 curl -X POST http://localhost:3000/api/jobs/enrichment \
   -H "Content-Type: application/json" \
@@ -124,6 +137,7 @@ curl -X POST http://localhost:3000/api/jobs/enrichment \
 ```
 
 **POST /api/jobs/health-scores**
+
 ```bash
 curl -X POST http://localhost:3000/api/jobs/health-scores \
   -H "Content-Type: application/json" \
@@ -144,6 +158,7 @@ curl http://localhost:3000/api/jobs/{job-id}
 ```
 
 Response:
+
 ```json
 {
   "jobId": "123",
@@ -166,6 +181,7 @@ curl http://localhost:3000/api/jobs/queues/stats
 ```
 
 Response:
+
 ```json
 {
   "queues": [
@@ -191,6 +207,7 @@ curl "http://localhost:3000/api/jobs/queues/data-enrichment?status=active&limit=
 ```
 
 Query Parameters:
+
 - `status`: `waiting`, `active`, `completed`, `failed`, `delayed` (default: `waiting`)
 - `limit`: Number of jobs to return (default: 20)
 
@@ -207,17 +224,20 @@ curl -X DELETE http://localhost:3000/api/jobs/{job-id}
 The job scheduler automatically queues recurring jobs:
 
 ### UCC Ingestion
+
 - **Frequency:** Daily at 2:00 AM
 - **States:** NY, CA, TX, FL, IL, PA, OH, GA, NC, MI
 - **Action:** Creates one ingestion job per state
 
 ### Enrichment Refresh
+
 - **Frequency:** Every 6 hours
 - **Target:** Prospects with no enrichment data or data older than 7 days
 - **Batch Size:** 50 prospects per job
 - **Limit:** 500 prospects per run
 
 ### Health Score Updates
+
 - **Frequency:** Every 12 hours
 - **Target:** Portfolio companies with stale health scores (>12 hours old)
 - **Batch Size:** 50 companies per job
@@ -237,11 +257,13 @@ All queues use exponential backoff for failed jobs:
 Completed and failed jobs are automatically removed based on retention policies:
 
 **Completed Jobs:**
+
 - Keep last 100 jobs
 - Or jobs from last 7 days
 - Whichever is greater
 
 **Failed Jobs:**
+
 - Keep last 500 jobs
 - Or jobs from last 30 days
 - Whichever is greater
@@ -263,6 +285,7 @@ REDIS_PASSWORD=your-password-here
 For production deployments, run workers as separate processes from the API server:
 
 1. **API Server:** Handles HTTP requests and queues jobs
+
    ```bash
    npm run start:server
    ```
@@ -273,6 +296,7 @@ For production deployments, run workers as separate processes from the API serve
    ```
 
 This allows independent scaling:
+
 - Scale API servers horizontally for traffic
 - Scale workers horizontally for job processing
 
@@ -289,6 +313,7 @@ kill -SIGTERM <server-pid>
 ```
 
 Shutdown sequence:
+
 1. Stop accepting new jobs
 2. Complete active jobs (up to 30 seconds)
 3. Close queue connections
@@ -309,16 +334,19 @@ DEBUG=bull:* npm run dev:worker
 ### Common Issues
 
 **Issue: Jobs stuck in waiting**
+
 - Check Redis connection
 - Verify worker process is running
 - Check worker concurrency limits
 
 **Issue: Jobs failing repeatedly**
+
 - Check database connectivity
 - Verify external API credentials (Phase 2)
 - Review job error logs in failed jobs queue
 
 **Issue: High memory usage**
+
 - Reduce worker concurrency
 - Decrease batch sizes
 - Check for memory leaks in worker code

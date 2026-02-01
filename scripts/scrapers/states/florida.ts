@@ -7,12 +7,17 @@
 
 import { BaseScraper, ScraperResult } from '../base-scraper'
 import puppeteer, { Browser, Page } from 'puppeteer'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { PaginationHandler } from '../pagination-handler'
 
 export class FloridaScraper extends BaseScraper {
   private browser: Browser | null = null
+  private lastPage: Page | null = null
+  private headless: boolean
+  private keepPageOpenOnFailure: boolean
 
-  constructor() {
+  constructor(options: { headless?: boolean; keepPageOpenOnFailure?: boolean } = {}) {
     super({
       state: 'FL',
       baseUrl: 'https://floridaucc.com/search',
@@ -20,12 +25,14 @@ export class FloridaScraper extends BaseScraper {
       timeout: 45000, // Increased timeout for third-party portal
       retryAttempts: 2
     })
+    this.headless = options.headless ?? true
+    this.keepPageOpenOnFailure = options.keepPageOpenOnFailure ?? false
   }
 
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: true,
+        headless: this.headless,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -43,6 +50,50 @@ export class FloridaScraper extends BaseScraper {
     if (this.browser) {
       await this.browser.close()
       this.browser = null
+      this.lastPage = null
+    }
+  }
+
+  async captureDiagnostics(
+    outputDir: string,
+    baseName: string
+  ): Promise<{ screenshotPath?: string; htmlPath?: string }> {
+    if (!this.lastPage || this.lastPage.isClosed()) {
+      return {}
+    }
+
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true })
+    }
+
+    const screenshotPath = join(outputDir, `${baseName}.png`)
+    const htmlPath = join(outputDir, `${baseName}.html`)
+
+    let savedScreenshot = false
+    let savedHtml = false
+
+    try {
+      await this.lastPage.screenshot({ path: screenshotPath, fullPage: true })
+      savedScreenshot = true
+    } catch (error) {
+      this.log('warn', 'Failed to capture screenshot', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    try {
+      const html = await this.lastPage.content()
+      writeFileSync(htmlPath, html)
+      savedHtml = true
+    } catch (error) {
+      this.log('warn', 'Failed to capture HTML snapshot', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    return {
+      screenshotPath: savedScreenshot ? screenshotPath : undefined,
+      htmlPath: savedHtml ? htmlPath : undefined
     }
   }
 
@@ -104,10 +155,16 @@ export class FloridaScraper extends BaseScraper {
    */
   private async performSearch(companyName: string, searchUrl: string): Promise<ScraperResult> {
     let page: Page | null = null
+    let result: ScraperResult | null = null
+    const finalize = (next: ScraperResult): ScraperResult => {
+      result = next
+      return next
+    }
 
     try {
       const browser = await this.getBrowser()
       page = await browser.newPage()
+      this.lastPage = page
 
       this.log('info', 'Browser page created', { companyName })
 
@@ -139,12 +196,12 @@ export class FloridaScraper extends BaseScraper {
 
       if (hasCaptcha) {
         this.log('error', 'CAPTCHA detected', { companyName })
-        return {
+        return finalize({
           success: false,
           error: 'CAPTCHA detected - manual intervention required',
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       // Navigate through the Florida UCC landing flow to reach the search form
@@ -161,13 +218,13 @@ export class FloridaScraper extends BaseScraper {
 
       if (!acknowledged) {
         this.log('warn', 'Could not find UCC search entry point', { companyName })
-        return {
+        return finalize({
           success: false,
           error:
             'Unable to locate UCC search entry point on Florida UCC portal. Portal structure may have changed.',
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       if (acknowledged) {
@@ -267,12 +324,12 @@ export class FloridaScraper extends BaseScraper {
 
       if (!formSubmitted) {
         this.log('warn', 'Could not submit search form', { companyName })
-        return {
+        return finalize({
           success: false,
           error: 'Unable to submit search form on Florida UCC portal.',
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       // Wait for results to load
@@ -297,12 +354,12 @@ export class FloridaScraper extends BaseScraper {
 
       if (noResults) {
         this.log('info', 'No UCC filings found', { companyName })
-        return {
+        return finalize({
           success: true,
           filings: [],
           searchUrl: page.url(),
           timestamp: new Date().toISOString()
-        }
+        })
       }
 
       // Initialize pagination handler
@@ -498,20 +555,23 @@ export class FloridaScraper extends BaseScraper {
         errorCount: validationErrors.length
       })
 
-      return {
+      return finalize({
         success: true,
         filings: validatedFilings,
         searchUrl: page.url(),
         timestamp: new Date().toISOString(),
         parsingErrors: validationErrors.length > 0 ? validationErrors : undefined
-      }
+      })
     } finally {
       if (page) {
-        await page.close().catch((err) => {
-          this.log('warn', 'Error closing page', {
-            error: err instanceof Error ? err.message : String(err)
+        const keepPage = this.keepPageOpenOnFailure && result && !result.success
+        if (!keepPage) {
+          await page.close().catch((err) => {
+            this.log('warn', 'Error closing page', {
+              error: err instanceof Error ? err.message : String(err)
+            })
           })
-        })
+        }
       }
     }
   }
