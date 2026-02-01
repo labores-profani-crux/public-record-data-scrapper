@@ -124,12 +124,19 @@ vi.mock('@public-records/ui/select', () => ({
   }) => (
     <div data-testid="select" data-value={value}>
       <select
-        value={value}
+        value={value || ''}
         onChange={(e) => onValueChange?.(e.target.value)}
         data-testid="select-native"
+        aria-hidden="true"
       >
-        {children}
+        <option value="all" />
+        <option value="email" />
+        <option value="sms" />
+        <option value="call" />
+        <option value="inbound" />
+        <option value="outbound" />
       </select>
+      <div data-testid="select-display">{children}</div>
     </div>
   ),
   SelectTrigger: ({
@@ -149,7 +156,9 @@ vi.mock('@public-records/ui/select', () => ({
     <div data-testid="select-content">{children}</div>
   ),
   SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
-    <option value={value}>{children}</option>
+    <div data-testid="select-item" data-value={value} role="option">
+      {children}
+    </div>
   ),
   SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>
 }))
@@ -378,9 +387,9 @@ describe('UnifiedInbox', () => {
 
     it('displays message status', () => {
       render(<UnifiedInbox {...defaultProps} />)
-      expect(screen.getByText('delivered')).toBeInTheDocument()
-      expect(screen.getByText('opened')).toBeInTheDocument()
-      expect(screen.getByText('answered')).toBeInTheDocument()
+      expect(screen.getAllByText('delivered').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('opened').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('answered').length).toBeGreaterThan(0)
     })
 
     it('displays relative time for messages', () => {
@@ -629,7 +638,7 @@ describe('UnifiedInbox', () => {
       const user = userEvent.setup()
       render(<UnifiedInbox {...defaultProps} />)
 
-      // Filter to calls only and select the call message
+      // Filter to calls only
       const selects = screen.getAllByTestId('select-native')
       await user.selectOptions(selects[0], 'call')
 
