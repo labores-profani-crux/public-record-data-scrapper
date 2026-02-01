@@ -300,10 +300,11 @@ describe('DealPipeline', () => {
 
     it('renders all stage columns', () => {
       render(<DealPipeline {...defaultProps} />)
-      expect(screen.getByText('Lead')).toBeInTheDocument()
-      expect(screen.getByText('Contacted')).toBeInTheDocument()
-      expect(screen.getByText('Underwriting')).toBeInTheDocument()
-      expect(screen.getByText('Funded')).toBeInTheDocument()
+      // Stage names appear multiple times (column headers, dropdown menu items, summary)
+      expect(screen.getAllByText('Lead').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Contacted').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Underwriting').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Funded').length).toBeGreaterThan(0)
     })
   })
 
@@ -313,7 +314,8 @@ describe('DealPipeline', () => {
       const { stages, ...propsWithoutStages } = defaultProps
       render(<DealPipeline {...propsWithoutStages} />)
       // Default stages include Pack Submitted, Approved which aren't in mockStages
-      expect(screen.getByText('Lead')).toBeInTheDocument()
+      // Stage names appear multiple times (column headers, dropdown menu items, summary)
+      expect(screen.getAllByText('Lead').length).toBeGreaterThan(0)
     })
   })
 

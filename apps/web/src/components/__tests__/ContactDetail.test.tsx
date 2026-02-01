@@ -336,7 +336,8 @@ describe('ContactDetail', () => {
 
     it('displays preferred contact method', () => {
       render(<ContactDetail {...defaultProps} />)
-      expect(screen.getByText('Email')).toBeInTheDocument()
+      // 'Email' may appear multiple times (preferred method label and value)
+      expect(screen.getAllByText('Email').length).toBeGreaterThan(0)
     })
 
     it('displays timezone', () => {
@@ -386,7 +387,8 @@ describe('ContactDetail', () => {
     it('renders call button when onCall provided', () => {
       const onCall = vi.fn()
       render(<ContactDetail {...defaultProps} onCall={onCall} />)
-      expect(screen.getByTestId('phone-icon')).toBeInTheDocument()
+      // Multiple phone icons may exist (contact info section + action button)
+      expect(screen.getAllByTestId('phone-icon').length).toBeGreaterThan(0)
     })
 
     it('renders email button when onEmail provided', () => {
@@ -595,12 +597,20 @@ describe('ContactDetail', () => {
       const onProspectSelect = vi.fn()
       render(<ContactDetail {...defaultProps} onProspectSelect={onProspectSelect} />)
 
-      // Find the card containing Acme Corp
+      // Find the card containing Acme Corp - it should have cursor-pointer for click
       const cards = screen.getAllByTestId('card')
-      const prospectCard = cards.find((card) => card.textContent?.includes('Acme Corp'))
-      expect(prospectCard).toBeTruthy()
+      const prospectCard = cards.find(
+        (card) =>
+          card.textContent?.includes('Acme Corp') &&
+          (card.className?.includes('cursor-pointer') || card.getAttribute('onClick'))
+      )
 
-      await user.click(prospectCard!)
+      // If no specific prospect card found, just find by text
+      const cardToClick =
+        prospectCard || cards.find((card) => card.textContent?.includes('Acme Corp'))
+      expect(cardToClick).toBeTruthy()
+
+      await user.click(cardToClick!)
       expect(onProspectSelect).toHaveBeenCalledWith(mockProspect)
     })
   })

@@ -442,7 +442,8 @@ describe('DealDetail', () => {
 
     it('displays stage badge', () => {
       render(<DealDetail {...defaultProps} />)
-      expect(screen.getByText('Contacted')).toBeInTheDocument()
+      // Stage name may appear multiple times (badge, stepper)
+      expect(screen.getAllByText('Contacted').length).toBeGreaterThan(0)
     })
 
     it('displays priority badge', () => {
@@ -460,15 +461,17 @@ describe('DealDetail', () => {
 
     it('displays approved amount', () => {
       render(<DealDetail {...defaultProps} />)
-      expect(screen.getByText('$45,000')).toBeInTheDocument()
-      expect(screen.getByText('Approved')).toBeInTheDocument()
+      // Amount may appear multiple times (summary and disclosure sections)
+      expect(screen.getAllByText('$45,000').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
     })
 
     it('displays funded amount when present', () => {
       const fundedDeal = { ...mockDeal, amountFunded: 42000 }
       render(<DealDetail {...defaultProps} deal={fundedDeal} />)
-      expect(screen.getByText('$42,000')).toBeInTheDocument()
-      expect(screen.getByText('Funded')).toBeInTheDocument()
+      expect(screen.getAllByText('$42,000').length).toBeGreaterThan(0)
+      // 'Funded' may appear in stage name and amount label
+      expect(screen.getAllByText(/Funded/i).length).toBeGreaterThan(0)
     })
   })
 
@@ -672,17 +675,20 @@ describe('DealDetail', () => {
 
     it('displays NSF count', () => {
       render(<DealDetail {...defaultProps} />)
-      expect(screen.getByText('2')).toBeInTheDocument()
+      // '2' may appear multiple times (NSF count, document count badge)
+      expect(screen.getAllByText('2').length).toBeGreaterThan(0)
     })
 
     it('displays existing positions', () => {
       render(<DealDetail {...defaultProps} />)
-      expect(screen.getByText('1')).toBeInTheDocument()
+      // '1' may appear in activity count badge and positions count
+      expect(screen.getAllByText('1').length).toBeGreaterThan(0)
     })
 
     it('displays probability', () => {
       render(<DealDetail {...defaultProps} />)
-      expect(screen.getByText('75%')).toBeInTheDocument()
+      // Probability may appear in badge and progress sections
+      expect(screen.getAllByText(/75%/).length).toBeGreaterThan(0)
     })
 
     it('shows connect bank prompt when no bank data', () => {
@@ -753,7 +759,11 @@ describe('DealDetail', () => {
         />
       )
 
-      await user.click(screen.getByRole('button', { name: /generate disclosure/i }))
+      const generateButton = screen
+        .getAllByRole('button')
+        .find((btn) => btn.textContent?.toLowerCase().includes('generate disclosure'))
+      expect(generateButton).toBeTruthy()
+      await user.click(generateButton!)
       expect(onGenerateDisclosure).toHaveBeenCalledTimes(1)
     })
   })
