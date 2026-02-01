@@ -1,0 +1,90 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['main', 'master', 'develop']
+
+jobs:
+  test:
+    name: Backend Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ucc_intelligence_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ucc_intelligence_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ucc_intelligence_test
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Install BullMQ and ioredis
+        run: npm install bullmq ioredis --ignore-scripts
+
+      - name: Run database migrations
+        run: npm run migrate
+
+      - name: Run server tests
+        run: npm run test:server
+
+      - name: Generate coverage report
+        run: npm run test:server:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+        continue-on-error: true
+
+      - name: Check coverage thresholds
+        run: |
+          echo "Checking coverage thresholds (80% lines, functions, statements; 75% branches)"
+          npm run test:server:coverage -- --reporter=json
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          lcov-file: ./coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

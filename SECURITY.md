@@ -29,3 +29,17 @@ This information will help us triage your report more quickly.
 ## Policy
 
 See [GitHub's Safe Harbor Policy](https://docs.github.com/en/site-policy/security-policies/github-bug-bounty-program-legal-safe-harbor#1-safe-harbor-terms)
+
+## Code Scanning Availability
+
+This repository currently cannot run GitHub Actions that power the default CodeQL
+code-scanning workflow because the organization-wide policy blocks the
+`actions/*` and `github/codeql-action/*` action publishers. If you want automated
+code-scanning results to appear in the repository Security tab, update the
+policy to allow those publishers or configure an approved reusable workflow that
+invokes them on your behalf.
+
+If relaxing the policy is not possible, you can still produce code-scanning
+results by running CodeQL locally or in an approved environment and uploading
+the SARIF output through the
+[code scanning API](https://docs.github.com/en/rest/code-scanning/code-scanning#upload-an-analysis-as-sarif-data).
