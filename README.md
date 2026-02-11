@@ -1,5 +1,13 @@
 # UCC-MCA Intelligence Platform
 
+[![CI](https://github.com/organvm-iii-ergon/public-record-data-scrapper/actions/workflows/ci.yml/badge.svg)](https://github.com/organvm-iii-ergon/public-record-data-scrapper/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey)](https://github.com/organvm-iii-ergon/public-record-data-scrapper)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/organvm-iii-ergon/public-record-data-scrapper/blob/main/LICENSE)
+[![Organ III](https://img.shields.io/badge/Organ-III%20Ergon-F59E0B)](https://github.com/organvm-iii-ergon)
+[![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/organvm-iii-ergon/public-record-data-scrapper)
+[![TypeScript](https://img.shields.io/badge/lang-TypeScript-informational)](https://github.com/organvm-iii-ergon/public-record-data-scrapper)
+
+
 [![ORGAN-III: Commerce](https://img.shields.io/badge/ORGAN--III-Commerce-2e7d32?style=flat-square)](https://github.com/organvm-iii-ergon)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
