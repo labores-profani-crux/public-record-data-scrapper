@@ -37,16 +37,25 @@ jobs:
           - 6379:6379
 
     env:
+      # Standard DATABASE_URL for ORMs and libraries
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ucc_intelligence_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ucc_intelligence_test
-      REDIS_HOST: localhost
-      REDIS_PORT: 6379
-      NODE_ENV: test
+      # DB_* vars used by scripts/migrate.ts (loaded via dotenv, these override .env defaults)
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: ucc_intelligence_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # Standard PG* vars
       PGUSER: postgres
       PGPASSWORD: postgres
       PGHOST: localhost
-      PGPORT: 5432
+      PGPORT: "5432"
       PGDATABASE: ucc_intelligence_test
+      # Application env
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      NODE_ENV: test
 
     steps:
       - name: Checkout code
@@ -74,8 +83,6 @@ jobs:
 
       - name: Run database migrations
         run: npm run migrate
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ucc_intelligence_test
 
       - name: Run server tests
         run: npm run test:server
