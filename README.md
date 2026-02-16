@@ -7,7 +7,6 @@
 [![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/organvm-iii-ergon/public-record-data-scrapper)
 [![TypeScript](https://img.shields.io/badge/lang-TypeScript-informational)](https://github.com/organvm-iii-ergon/public-record-data-scrapper)
 
-
 [![ORGAN-III: Commerce](https://img.shields.io/badge/ORGAN--III-Commerce-2e7d32?style=flat-square)](https://github.com/organvm-iii-ergon)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -15,6 +14,10 @@
 [![Coverage: 100%](https://img.shields.io/badge/coverage-100%25-success?style=flat-square)](https://github.com/organvm-iii-ergon/public-record-data-scrapper)
 [![Deploy: Vercel](https://img.shields.io/badge/deploy-Vercel-black?style=flat-square&logo=vercel)](https://public-record-data-scrapper.vercel.app)
 [![Infra: Terraform + AWS](https://img.shields.io/badge/infra-Terraform%20%2B%20AWS-844FBA?style=flat-square&logo=terraform&logoColor=white)](./terraform)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)]()
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker)](Dockerfile)
+[![Tauri](https://img.shields.io/badge/Tauri-desktop%20app-FFC131?style=flat-square&logo=tauri)](apps/desktop/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-database-4169E1?style=flat-square&logo=postgresql)]()
 
 **AI-powered lead generation and prospect intelligence for the Merchant Cash Advance industry. 60+ autonomous agents. 50-state UCC filing coverage. Production-deployed on Vercel with Terraform-provisioned AWS infrastructure.**
 
